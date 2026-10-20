@@ -372,6 +372,7 @@
   color: var(--text-muted);
   display: -webkit-box;
   -webkit-line-clamp: 1;
+  line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -383,7 +384,7 @@
 .epg-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 2000;
+  z-index: 3000;
   background: rgba(4, 7, 6, 0.85);
   backdrop-filter: blur(12px);
   display: flex;
@@ -453,10 +454,10 @@
    ========================================================================== */
 
 .theater-epg-ticker {
-  padding: 0.38rem 1.25rem;
-  background: rgba(8, 14, 11, 0.96);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.38rem 1.5rem;
+  background: transparent;
+  border-top: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -619,6 +620,15 @@
   overflow-x: auto;
   min-height: 0;
   max-height: none;
+}
+
+@keyframes epg-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.rotating {
+  animation: epg-spin 0.8s linear infinite;
 }
 
 

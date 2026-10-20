@@ -47,13 +47,46 @@ An ultra-modern, dark-glass live streaming web application inspired by the **Cin
 
 ---
 
-## 🚀 How to Run
+## 🚀 How to Run Locally (Standalone / No IDE Required)
 
-1. Open a terminal in the project directory:
-   ```bash
-   cd c:\Users\ivanc\Downloads\IVTV
-   ```
-2. Start any local web server:
-   - **Python**: `python -m http.server 5173`
-   - **Node / npx**: `npx serve -l 5173`
-3. Open your browser at `http://localhost:5173` (or simply open `index.html` directly in any modern browser).
+You do **not** need Antigravity or any IDE open to watch IV - TV. Everything runs completely standalone on your Windows PC:
+
+### Option 1: Desktop & Start Menu Shortcuts (Easiest — 1-Click)
+Shortcuts have been configured directly on your Windows Desktop and Start Menu:
+- **`IV - TV`**: Double-click to silently start the background server (zero console flashing) and launch the frameless standalone desktop TV player with unmuted audio playback enabled.
+- **`Stop IV - TV`**: 1-click shortcut to stop and close the background server when you are done watching.
+- **Start Menu**: Type `IV - TV` or `IVTV` in the Windows Start Menu or search bar to launch instantly.
+
+*(To re-create or update desktop shortcuts at any time, run `create_desktop_shortcut.bat`)*.
+
+---
+
+### Option 2: From File Explorer
+Simply double-click the helper scripts inside the project directory:
+- **[launch.bat](file:///c:/Users/ivanc/IV%20-%20TV/launch.bat)** (or `launch.vbs`): Starts the server silently in the background (using `pythonw.exe`) with zero console flickering and opens `http://localhost:5173`.
+- **[stop.bat](file:///c:/Users/ivanc/IV%20-%20TV/stop.bat)** (or `stop.vbs`): Cleanly terminates the background server listening on port 5173.
+
+---
+
+---
+
+## 📴 Full Offline & Standalone PWA Support
+
+IVTV is fully engineered for zero-latency offline use with zero external CDN dependencies:
+
+1. **Local Bundled Assets**:
+   - **HLS.js**: Bundled locally at [js/hls.min.js](file:///c:/Users/ivanc/IV%20-%20TV/js/hls.min.js) — streams boot instantly without CDN queries.
+   - **Modern Typography**: Outfit & Plus Jakarta Sans webfonts stored locally in `assets/fonts/` and served via [css/fonts.css](file:///c:/Users/ivanc/IV%20-%20TV/css/fonts.css).
+   - **All 70 Channel Logos**: 100% stored locally in `assets/logos/` — zero missing or broken external image links.
+   - **Local Hero Visuals**: All featured streaming hero backdrops saved in `assets/images/`.
+
+2. **Progressive Web App (PWA) & Service Worker**:
+   - [manifest.webmanifest](file:///c:/Users/ivanc/IV%20-%20TV/manifest.webmanifest): Configured for frameless desktop standalone window launch.
+   - [sw.js](file:///c:/Users/ivanc/IV%20-%20TV/sw.js): Pre-caches 98 application shell assets for instant startup even with no network connection.
+
+3. **Dynamic Offline Detection & Visual Status Pill**:
+   - Real-time connectivity monitor in navbar: displays **ONLINE** (green pulse) when connected and **OFFLINE** (amber) when disconnected.
+   - When offline, the complete **24-hour EPG TV Guide**, **Watchlist & Favorites**, **All UK Channels Directory**, and instant search remain 100% operational.
+   - The theater player provides intelligent offline notifications with direct 1-click access to the TV Guide.
+
+

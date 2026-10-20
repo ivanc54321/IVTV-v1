@@ -1,3 +1,4 @@
 @echo off
 cd /d "%~dp0"
-wscript.exe "%~dp0launch.vbs"
+start "" wscript.exe "%~dp0launch.vbs" %*
+exit /b 0

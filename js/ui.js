@@ -22,6 +22,7 @@ class UIController {
   init() {
     this.renderHero();
     this.renderTopRanked();
+    this.renderFreeviewSection();
     this.renderProvidersBar();
     this.renderAllUKChannels();
     this.renderCategorySections();
@@ -29,15 +30,21 @@ class UIController {
     this.renderEPG();
     this.setupEPGClock();
     this.setupHeroAutoSlide();
+    this.setupHeroActions();
     this.setupEventListeners();
     this.setupAllChannelsEventListeners();
 
-    // Auto-refresh cards every 60s so live program tickers and progress stay fresh
-    setInterval(() => {
-      this.renderTopRanked();
-      this.renderAllUKChannels();
-      this.renderCategorySections();
-    }, 60000);
+    // Expose global hero tuner for buttons and hotkeys
+    window.tuneHeroChannel = () => this.tuneHeroChannel();
+  }
+
+  tuneHeroChannel() {
+    const showcases = window.IVTV_DATA?.heroShowcases;
+    if (!showcases || showcases.length === 0) return;
+    const current = showcases[this.currentHeroIndex] || showcases[0];
+    if (current && window.ivtvPlayer) {
+      window.ivtvPlayer.openPlayer(current.channelId);
+    }
   }
 
   // ==========================================================================
@@ -70,36 +77,82 @@ class UIController {
     if (descEl) descEl.textContent = current.synopsis;
 
     if (badgesEl) {
-      badgesEl.innerHTML = `
-        <div class="rating-badge">★ ${current.rating}</div>
-        <div class="meta-pill live"><span class="live-pulse-dot"></span> LIVE</div>
-        <div class="meta-pill">${current.category}</div>
-        ${current.badges.map(b => `<div class="meta-pill">${b}</div>`).join('')}
-      `;
-    }
-
-    if (playBtn) {
-      playBtn.onclick = () => {
-        if (window.ivtvPlayer) {
-          window.ivtvPlayer.openPlayer(current.channelId);
-        }
-      };
-    }
-
-    if (favBtn) {
-      const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(current.channelId);
-      favBtn.classList.toggle('favorited', isFav);
-      favBtn.innerHTML = `<span>${isFav ? '★' : '☆'}</span> <span>${isFav ? 'In Watchlist' : 'Watchlist'}</span>`;
-      favBtn.onclick = () => {
-        const added = window.ivtvStorage.toggleFavorite(current.channelId);
-        favBtn.classList.toggle('favorited', added);
-        favBtn.innerHTML = `<span>${added ? '★' : '☆'}</span> <span>${added ? 'In Watchlist' : 'Watchlist'}</span>`;
-        window.showToast(added ? 'Added to Watchlist' : 'Removed from Watchlist', added ? 'success' : 'info');
-      };
+      badgesEl.innerHTML = '';
     }
 
     // Render Hero Thumbnails Slider & Pagination Dots
     this.renderHeroThumbnails();
+  }
+
+  setupHeroActions() {
+    const playBtn = document.getElementById('hero-play-btn');
+    const guideBtn = document.getElementById('hero-guide-btn');
+    const dirBtn = document.getElementById('hero-directory-btn');
+
+    if (playBtn) {
+      this.updateHeroPlayButtonHint();
+      playBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetId = this.getPrimaryLiveChannel();
+        if (window.ivtvPlayer) {
+          window.ivtvPlayer.openPlayer(targetId);
+          const ch = window.IVTV_DATA?.channels?.find(c => c.id === targetId);
+          if (ch && window.showToast) {
+            window.showToast(`Starting Live Broadcast: ${ch.name}`, 'success');
+          }
+        }
+      });
+
+      // Keep button hint in sync if recent channels change
+      window.addEventListener('ivtv:recent-changed', () => {
+        this.updateHeroPlayButtonHint();
+      });
+    }
+
+    if (guideBtn) {
+      guideBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.openTVGuide();
+      });
+    }
+
+    if (dirBtn) {
+      dirBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const allSec = document.getElementById('all-uk-channels-section') || document.getElementById('sky-channels-section');
+        if (allSec) {
+          allSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+  }
+
+  getPrimaryLiveChannel() {
+    try {
+      const last = localStorage.getItem('ivtv_last_channel_v1');
+      if (last && window.IVTV_DATA?.channels?.some(c => c.id === last)) {
+        return last;
+      }
+      if (window.ivtvStorage) {
+        const recent = window.ivtvStorage.getRecent();
+        if (recent && recent.length > 0) {
+          const found = window.IVTV_DATA?.channels?.find(c => c.id === recent[0]);
+          if (found) return found.id;
+        }
+      }
+    } catch (e) {}
+    // Rock-solid flagship verified live broadcast channel
+    return 'sky-atlantic-uk';
+  }
+
+  updateHeroPlayButtonHint() {
+    const hintEl = document.getElementById('hero-play-channel-hint');
+    if (!hintEl) return;
+    const targetId = this.getPrimaryLiveChannel();
+    const ch = window.IVTV_DATA?.channels?.find(c => c.id === targetId);
+    if (ch) {
+      hintEl.textContent = ch.chNumber ? `CH ${ch.chNumber} • ${ch.name}` : ch.name;
+    }
   }
 
   renderHeroThumbnails() {
@@ -112,14 +165,26 @@ class UIController {
         <div class="hero-thumb-card ${idx === this.currentHeroIndex ? 'active' : ''}" data-index="${idx}">
           <img class="hero-thumb-img" src="${s.image}" alt="${s.title}">
           <div class="hero-thumb-overlay">
-            <span class="hero-thumb-title">${s.subtitle}</span>
+            <div class="hero-thumb-badge-row">
+              <span class="hero-thumb-cat">${s.category.toUpperCase()}</span>
+              <span class="hero-thumb-live-dot"></span>
+            </div>
+            <span class="hero-thumb-title">${s.title}</span>
           </div>
         </div>
       `).join('');
 
       thumbsContainer.querySelectorAll('.hero-thumb-card').forEach(card => {
         card.addEventListener('click', () => {
-          this.setHeroSlide(parseInt(card.dataset.index, 10));
+          const idx = parseInt(card.dataset.index, 10);
+          if (idx === this.currentHeroIndex) {
+            const currentShowcase = showcases[idx];
+            if (currentShowcase && window.ivtvPlayer) {
+              window.ivtvPlayer.openPlayer(currentShowcase.channelId);
+            }
+          } else {
+            this.setHeroSlide(idx);
+          }
         });
       });
     }
@@ -135,6 +200,8 @@ class UIController {
         });
       });
     }
+
+    this.initCarouselMouseNavigation();
   }
 
   setHeroSlide(index) {
@@ -188,10 +255,53 @@ class UIController {
   }
 
   // ==========================================================================
+  // CHANNEL CARD BACKDROP RESOLVER (RELEVANT CINEMATIC BROADCAST IMAGES)
+  // ==========================================================================
+
+  getChannelBackdrop(ch) {
+    if (ch.backdrop) return ch.backdrop;
+    const id = (ch.id || '').toLowerCase();
+    const cat = (ch.category || '').toLowerCase();
+    const genre = (ch.genre || '').toLowerCase();
+
+    if (id.includes('f1') || id.includes('racing') || genre.includes('motorsport')) {
+      return 'assets/images/cards/card-f1.jpg';
+    }
+    if (id.includes('premier-league') || id.includes('football') || id.includes('main-event') || id.includes('tnt') || genre.includes('football')) {
+      return 'assets/images/cards/card-stadium.jpg';
+    }
+    if (cat === 'sports' || genre.includes('tennis') || genre.includes('golf') || genre.includes('cricket') || genre.includes('combat') || genre.includes('action')) {
+      return 'assets/images/cards/card-sports.jpg';
+    }
+    if (id.includes('bloomberg') || genre.includes('financial') || genre.includes('market')) {
+      return 'assets/images/cards/card-finance.jpg';
+    }
+    if (cat === 'news' || id.includes('cnn') || id.includes('sky-news') || id.includes('fox') || id.includes('msnbc') || id.includes('russia-today') || id.includes('rt') || genre.includes('news')) {
+      return 'assets/images/cards/card-newsroom.jpg';
+    }
+    if (id.includes('nature') || id.includes('documentar') || id.includes('history') || genre.includes('nature') || genre.includes('wildlife') || genre.includes('factual')) {
+      return 'assets/images/cards/card-nature.jpg';
+    }
+    if (id.includes('sci-fi') || id.includes('scifi') || genre.includes('sci-fi')) {
+      return 'assets/images/cards/card-scifi.jpg';
+    }
+    if (id.includes('action') || genre.includes('action') || genre.includes('thriller')) {
+      return 'assets/images/cards/card-action.jpg';
+    }
+    if (cat === 'cinema') {
+      return 'assets/images/cards/card-cinema.jpg';
+    }
+    if (cat === 'entertainment' || id.includes('atlantic') || id.includes('showcase') || id.includes('max') || id.includes('hbo') || id.includes('channel')) {
+      return 'assets/images/cards/card-drama.jpg';
+    }
+    return 'assets/images/cards/card-cinema.jpg';
+  }
+
+  // ==========================================================================
   // CHANNEL CARD BUILDER WITH ACCURATE LIVE BROADCAST METADATA
   // ==========================================================================
 
-  buildChannelCardInner(ch, isFav, rank = null) {
+  buildChannelCardInner(ch, isFav, rank = null, isDraggable = false) {
     const icon = this.getChannelIcon(ch);
     const prog = window.ivtvEPG ? window.ivtvEPG.getCurrentProgram(ch.id) : null;
     const progTitle = prog ? prog.title : 'Live Television Broadcast';
@@ -201,10 +311,18 @@ class UIController {
     const chNum = ch.chNumber ? `CH ${ch.chNumber}` : '';
     const logoSrc = ch.logo || (ch.logoUrl || '');
     const fallbackLogoSrc = ch.logoUrl || '';
+    const backdropSrc = this.getChannelBackdrop(ch);
 
     const liveBadge = rank
       ? `<span class="card-live-chip most-viewed-pill"><span class="live-pulse-dot" style="width:5px;height:5px;"></span> #${rank} MOST VIEWED</span>`
       : `<span class="card-live-chip"><span class="live-pulse-dot" style="width:5px;height:5px;"></span> LIVE</span>`;
+
+    const dragBadge = isDraggable
+      ? `<span class="card-drag-chip" title="Drag to rearrange position">
+           <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="6" r="2.2"/><circle cx="16" cy="6" r="2.2"/><circle cx="8" cy="12" r="2.2"/><circle cx="16" cy="12" r="2.2"/><circle cx="8" cy="18" r="2.2"/><circle cx="16" cy="18" r="2.2"/></svg>
+           <span>DRAG</span>
+         </span>`
+      : '';
 
     const viewsBadge = rank
       ? `<span class="card-views-count highlight-views">🔥 ${ch.views} viewers</span>`
@@ -212,16 +330,20 @@ class UIController {
 
     return `
       <div class="card-media">
-        <div class="card-media-bg card-media-logo-wrap" style="background: ${ch.gradient};">
+        <div class="card-media-bg card-media-logo-wrap">
+          <img class="card-bg-backdrop-img" src="${backdropSrc}" alt="${ch.name} Broadcast" loading="lazy">
+          <div class="card-backdrop-overlay"></div>
           <div class="card-logo-ambient-glow" style="background: ${ch.gradient};"></div>
-          <img class="card-channel-logo-img" 
-               src="${logoSrc}" 
-               alt="${ch.name} Logo" 
-               loading="lazy"
-               onerror="if (this.dataset.fb !== '1' && '${fallbackLogoSrc}') { this.dataset.fb = '1'; this.src = '${fallbackLogoSrc}'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
-          <div class="card-logo-fallback-badge" style="display: none;">
-            <span style="font-size: 1.6rem; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6));">${icon}</span>
-            <span style="text-shadow: 0 2px 8px rgba(0,0,0,0.7);">${ch.name}</span>
+          <div class="card-logo-emblem-plate">
+            <img class="card-channel-logo-img" 
+                 src="${logoSrc}" 
+                 alt="${ch.name} Logo" 
+                 loading="lazy"
+                 onerror="if (this.dataset.fb !== '1' && '${fallbackLogoSrc}') { this.dataset.fb = '1'; this.src = '${fallbackLogoSrc}'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+            <div class="card-logo-fallback-badge" style="display: none;">
+              <span style="font-size: 1.6rem; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6));">${icon}</span>
+              <span style="text-shadow: 0 2px 8px rgba(0,0,0,0.7);">${ch.name}</span>
+            </div>
           </div>
         </div>
         <div class="card-media-overlay">
@@ -230,10 +352,12 @@ class UIController {
           </div>
         </div>
         <div class="card-top-badges">
-          ${liveBadge}
-          ${chNum ? `<span class="card-ch-pill">${chNum}</span>` : ''}
-          <button class="card-fav-btn ${isFav ? 'active' : ''}" title="Favorite" onclick="event.stopPropagation(); window.UIControllerInstance.handleFavClick('${ch.id}', this)">
-            ★
+          <div class="card-top-badges-left">
+            ${liveBadge}
+            ${dragBadge}
+          </div>
+          <button class="card-fav-btn ${isFav ? 'active' : ''}" title="${isFav ? 'Remove from Watchlist' : 'Add to Watchlist'}" onclick="event.stopPropagation(); window.UIControllerInstance.handleFavClick('${ch.id}', this)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           </button>
         </div>
       </div>
@@ -282,15 +406,64 @@ class UIController {
     track.innerHTML = sorted.map((ch, index) => {
       const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
       const rank = index + 1;
-      return `
-        <div class="ranked-card-wrapper" data-channel-id="${ch.id}">
-          <div class="giant-rank-numeral rank-${rank}">${rank}</div>
-          <div class="ranked-channel-card" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
-            ${this.buildChannelCardInner(ch, isFav, rank)}
+      return this.buildRankedPosterCard(ch, rank, isFav);
+    }).join('');
+
+    this.initCarouselMouseNavigation();
+  }
+
+  buildRankedPosterCard(ch, rank, isFav) {
+    const icon = this.getChannelIcon(ch);
+    const chNum = ch.chNumber ? `CH ${ch.chNumber}` : '';
+    const logoSrc = ch.logo || (ch.logoUrl || '');
+    const fallbackLogoSrc = ch.logoUrl || '';
+    const backdropSrc = this.getChannelBackdrop(ch);
+
+    return `
+      <div class="ranked-card-wrapper" data-channel-id="${ch.id}">
+        <div class="giant-rank-numeral rank-${rank}">${rank}</div>
+        <div class="ranked-poster-item" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
+          <div class="ranked-poster-media">
+            <div class="card-media-bg card-media-logo-wrap">
+              <img class="card-bg-backdrop-img" src="${backdropSrc}" alt="${ch.name} Broadcast" loading="lazy">
+              <div class="card-backdrop-overlay"></div>
+              <div class="card-logo-ambient-glow" style="background: ${ch.gradient};"></div>
+              <div class="card-logo-emblem-plate">
+                <img class="card-channel-logo-img" 
+                     src="${logoSrc}" 
+                     alt="${ch.name} Logo" 
+                     loading="lazy"
+                     onerror="if (this.dataset.fb !== '1' && '${fallbackLogoSrc}') { this.dataset.fb = '1'; this.src = '${fallbackLogoSrc}'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                <div class="card-logo-fallback-badge" style="display: none;">
+                  <span style="font-size: 1.6rem;">${icon}</span>
+                  <span>${ch.name}</span>
+                </div>
+              </div>
+            </div>
+            <div class="card-media-overlay">
+              <div class="card-play-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </div>
+            </div>
+            <div class="ranked-badge-overlay">
+              <span class="ranked-pill">#${rank}</span>
+            </div>
+            <button class="card-fav-btn ${isFav ? 'active' : ''}" title="${isFav ? 'Remove from Watchlist' : 'Add to Watchlist'}" onclick="event.stopPropagation(); window.UIControllerInstance.handleFavClick('${ch.id}', this)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </button>
+          </div>
+          <div class="ranked-poster-meta">
+            <div class="ranked-poster-title">${ch.name}</div>
+            <div class="ranked-poster-sub">
+              <span class="ranked-cat">${ch.category}</span>
+              ${chNum ? `<span class="ranked-chnum">${chNum}</span>` : ''}
+              <span class="ranked-views">🔥 ${ch.views}</span>
+              <span class="ranked-rating">★ ${ch.rating || 4.9}</span>
+            </div>
           </div>
         </div>
-      `;
-    }).join('');
+      </div>
+    `;
   }
 
   // ==========================================================================
@@ -405,11 +578,13 @@ class UIController {
     if (emptyState) emptyState.style.display = 'none';
 
     // Render Cards HTML
-    const cardsHtml = channels.map(ch => {
+    const isSortingByViews = this.allChannelsSort === 'views';
+    const cardsHtml = channels.map((ch, idx) => {
       const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
+      const rank = isSortingByViews ? (idx + 1) : null;
       return `
         <div class="channel-card" data-channel-id="${ch.id}" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
-          ${this.buildChannelCardInner(ch, isFav)}
+          ${this.buildChannelCardInner(ch, isFav, rank)}
         </div>
       `;
     }).join('');
@@ -428,6 +603,8 @@ class UIController {
         grid.innerHTML = cardsHtml;
       }
     }
+
+    this.initCarouselMouseNavigation();
   }
 
   setupAllChannelsEventListeners() {
@@ -517,11 +694,345 @@ class UIController {
   // ==========================================================================
 
   renderCategorySections() {
-    this.renderRow('entertainment-track', ch => ch.category === 'Entertainment');
+    this.renderFreeviewSection();
+    this.renderSkyChannels(this.skySubfilter || 'all');
+    this.renderSportsSection(this.sportsSubfilter || 'all');
+    this.renderNewsSection();
     this.renderRow('cinema-track', ch => ch.category === 'Cinema');
-    this.renderRow('news-track', ch => ch.category === 'News');
-    this.renderRow('sports-track', ch => ch.category === 'Sports');
+    this.renderRow('entertainment-track', ch => ch.category === 'Entertainment');
     this.renderFavoritesRow();
+    this.initCarouselMouseNavigation();
+  }
+
+  // ==========================================================================
+  // UK FREEVIEW & TERRESTRIAL SECTION (DRAGGABLE & REORDERABLE)
+  // Default Order: BBC 1, ITV1, Channel 4, Channel 5, then other BBC channels,
+  // followed by ITV2, ITV3, ITV4, Film4, Sky News, GB News.
+  // ==========================================================================
+
+  getDefaultFreeviewOrder() {
+    return [
+      'bbc-one-uk',
+      'itv1-uk',
+      'channel4',
+      'channel5',
+      'bbc-two-uk',
+      'bbc-three-uk',
+      'bbc-news-uk',
+      'itv2-uk',
+      'itv3-uk',
+      'itv4-uk',
+      'film4-uk',
+      'sky-news',
+      'gb-news'
+    ];
+  }
+
+  getFreeviewOrder() {
+    const defaultOrder = this.getDefaultFreeviewOrder();
+    try {
+      const saved = localStorage.getItem('ivtv_freeview_order');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const list = [...parsed];
+          defaultOrder.forEach(id => {
+            if (!list.includes(id)) list.push(id);
+          });
+          return list;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved Freeview order:', e);
+    }
+    return defaultOrder;
+  }
+
+  saveFreeviewOrder(orderArray) {
+    try {
+      localStorage.setItem('ivtv_freeview_order', JSON.stringify(orderArray));
+    } catch (e) {
+      console.warn('Failed to save Freeview order:', e);
+    }
+  }
+
+  resetFreeviewOrder() {
+    try {
+      localStorage.removeItem('ivtv_freeview_order');
+    } catch (e) {}
+    this.renderFreeviewSection();
+    if (window.showToast) {
+      window.showToast('Freeview order reset to default (BBC 1, ITV1, Channel 4, Channel 5...)', 'info');
+    }
+  }
+
+  renderFreeviewSection() {
+    const track = document.getElementById('freeview-track');
+    if (!track) return;
+
+    const order = this.getFreeviewOrder();
+    const channels = order
+      .map(id => window.IVTV_DATA?.channels?.find(c => c.id === id))
+      .filter(Boolean);
+
+    const counter = document.getElementById('freeview-channels-counter');
+    if (counter) counter.textContent = `${channels.length} Channels`;
+
+    track.innerHTML = channels.map((ch, idx) => {
+      const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
+      return `
+        <div class="channel-card freeview-draggable-card" 
+             draggable="true" 
+             data-channel-id="${ch.id}" 
+             data-index="${idx}"
+             title="Drag to rearrange position • Click to watch">
+          ${this.buildChannelCardInner(ch, isFav, null, true)}
+        </div>
+      `;
+    }).join('');
+
+    this.setupFreeviewDragAndDrop(track);
+    this.initCarouselMouseNavigation();
+  }
+
+  setupFreeviewDragAndDrop(track) {
+    if (!track) return;
+
+    let draggedCard = null;
+    let isDragging = false;
+    let dragJustEnded = false;
+
+    const cards = track.querySelectorAll('.freeview-draggable-card');
+
+    cards.forEach(card => {
+      // Click handling on card: ONLY open player if NOT dragged!
+      card.addEventListener('click', (e) => {
+        if (dragJustEnded || isDragging || this.justDraggedFreeview) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return;
+        }
+        if (e.target.closest('.card-fav-btn')) return;
+        const chId = card.dataset.channelId;
+        if (chId && window.ivtvPlayer) {
+          window.ivtvPlayer.openPlayer(chId);
+        }
+      });
+
+      // Desktop HTML5 Drag Start
+      card.addEventListener('dragstart', (e) => {
+        draggedCard = card;
+        isDragging = true;
+        dragJustEnded = false;
+        this.justDraggedFreeview = true;
+        card.classList.add('is-dragging-card');
+        track.classList.add('track-is-reordering');
+
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.dataset.channelId);
+
+        setTimeout(() => {
+          if (card.classList.contains('is-dragging-card')) {
+            card.classList.add('drag-ghost');
+          }
+        }, 10);
+      });
+
+      // Drag End
+      card.addEventListener('dragend', () => {
+        if (draggedCard) {
+          draggedCard.classList.remove('is-dragging-card', 'drag-ghost');
+        }
+        track.classList.remove('track-is-reordering');
+
+        // Persist current DOM order
+        const newOrder = [...track.querySelectorAll('.freeview-draggable-card')].map(c => c.dataset.channelId);
+        this.saveFreeviewOrder(newOrder);
+
+        isDragging = false;
+        dragJustEnded = true;
+        this.justDraggedFreeview = true;
+        draggedCard = null;
+
+        setTimeout(() => {
+          dragJustEnded = false;
+          this.justDraggedFreeview = false;
+        }, 200);
+      });
+
+      // Drag Over on card
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        if (!draggedCard || draggedCard === card) return;
+
+        const rect = card.getBoundingClientRect();
+        const midPoint = rect.left + rect.width / 2;
+
+        if (e.clientX < midPoint) {
+          if (card.previousElementSibling !== draggedCard) {
+            track.insertBefore(draggedCard, card);
+          }
+        } else {
+          if (card.nextElementSibling !== draggedCard) {
+            track.insertBefore(draggedCard, card.nextElementSibling);
+          }
+        }
+      });
+
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (window.showToast) {
+          window.showToast('Freeview channel order updated', 'info');
+        }
+      });
+
+      // Mobile Touch Drag Support
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchMoved = false;
+
+      card.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1 || e.target.closest('.card-fav-btn')) return;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchMoved = false;
+      }, { passive: true });
+
+      card.addEventListener('touchmove', (e) => {
+        if (!e.touches || e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+          touchMoved = true;
+          this.justDraggedFreeview = true;
+          card.classList.add('is-dragging-card');
+
+          const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+          const targetCard = elemBelow ? elemBelow.closest('.freeview-draggable-card') : null;
+          if (targetCard && targetCard !== card && targetCard.parentElement === track) {
+            const rect = targetCard.getBoundingClientRect();
+            const midPoint = rect.left + rect.width / 2;
+            if (touch.clientX < midPoint) {
+              if (targetCard.previousElementSibling !== card) {
+                track.insertBefore(card, targetCard);
+              }
+            } else {
+              if (targetCard.nextElementSibling !== card) {
+                track.insertBefore(card, targetCard.nextElementSibling);
+              }
+            }
+          }
+        }
+      }, { passive: true });
+
+      card.addEventListener('touchend', () => {
+        if (touchMoved) {
+          card.classList.remove('is-dragging-card');
+          const newOrder = [...track.querySelectorAll('.freeview-draggable-card')].map(c => c.dataset.channelId);
+          this.saveFreeviewOrder(newOrder);
+          setTimeout(() => {
+            this.justDraggedFreeview = false;
+          }, 250);
+        }
+        touchMoved = false;
+      });
+    });
+
+    track.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+  }
+
+  renderSkyChannels(subfilter = 'all') {
+    this.skySubfilter = subfilter;
+    const track = document.getElementById('sky-channels-track');
+    if (!track) return;
+
+    let skyChannels = window.IVTV_DATA.channels.filter(c => {
+      const name = c.name.toLowerCase();
+      const id = c.id.toLowerCase();
+      return name.includes('sky') || id.includes('sky');
+    });
+
+    if (subfilter === 'Sports') {
+      skyChannels = skyChannels.filter(c => c.category === 'Sports' || c.name.toLowerCase().includes('sport'));
+    } else if (subfilter === 'Cinema') {
+      skyChannels = skyChannels.filter(c => c.category === 'Cinema' || c.name.toLowerCase().includes('cinema'));
+    } else if (subfilter === 'Entertainment') {
+      skyChannels = skyChannels.filter(c => c.category === 'Entertainment' || c.name.includes('Atlantic') || c.name.includes('Showcase') || c.name.includes('Max') || c.name.includes('Comedy') || c.name.includes('Arts'));
+    }
+
+    const counter = document.getElementById('sky-channels-counter');
+    if (counter) counter.textContent = `${skyChannels.length} Channels`;
+
+    track.innerHTML = skyChannels.map(ch => {
+      const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
+      return `
+        <div class="channel-card" data-channel-id="${ch.id}" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
+          ${this.buildChannelCardInner(ch, isFav)}
+        </div>
+      `;
+    }).join('');
+
+    this.initCarouselMouseNavigation();
+  }
+
+  renderSportsSection(subfilter = 'all') {
+    this.sportsSubfilter = subfilter;
+    const track = document.getElementById('sports-track');
+    if (!track) return;
+
+    let sports = window.IVTV_DATA.channels.filter(c => c.category === 'Sports' || c.name.toLowerCase().includes('sport'));
+
+    if (subfilter === 'Football') {
+      sports = sports.filter(c => c.name.toLowerCase().includes('premier') || c.name.toLowerCase().includes('football') || c.name.toLowerCase().includes('laliga'));
+    } else if (subfilter === 'F1') {
+      sports = sports.filter(c => c.name.toLowerCase().includes('f1') || c.name.toLowerCase().includes('racing') || c.name.toLowerCase().includes('rally'));
+    } else if (subfilter === 'Tennis') {
+      sports = sports.filter(c => c.name.toLowerCase().includes('tennis'));
+    } else if (subfilter === 'Action') {
+      sports = sports.filter(c => c.name.toLowerCase().includes('action') || c.name.toLowerCase().includes('wwe') || c.name.toLowerCase().includes('extreme'));
+    }
+
+    const counter = document.getElementById('sports-channels-counter');
+    if (counter) counter.textContent = `${sports.length} Channels`;
+
+    track.innerHTML = sports.map(ch => {
+      const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
+      return `
+        <div class="channel-card" data-channel-id="${ch.id}" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
+          ${this.buildChannelCardInner(ch, isFav)}
+        </div>
+      `;
+    }).join('');
+
+    this.initCarouselMouseNavigation();
+  }
+
+  renderNewsSection() {
+    const track = document.getElementById('news-track');
+    if (!track) return;
+
+    const news = window.IVTV_DATA.channels.filter(c => c.category === 'News' || c.name.toLowerCase().includes('news') || c.name.toLowerCase().includes('bloomberg') || c.name.toLowerCase().includes('cnbc') || c.name.toLowerCase().includes('cnn'));
+
+    const counter = document.getElementById('news-channels-counter');
+    if (counter) counter.textContent = `${news.length} Channels`;
+
+    track.innerHTML = news.map(ch => {
+      const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
+      return `
+        <div class="channel-card" data-channel-id="${ch.id}" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
+          ${this.buildChannelCardInner(ch, isFav)}
+        </div>
+      `;
+    }).join('');
+
+    this.initCarouselMouseNavigation();
   }
 
   renderRow(containerId, filterFn) {
@@ -543,22 +1054,37 @@ class UIController {
   renderFavoritesRow() {
     const container = document.getElementById('favorites-section');
     const track = document.getElementById('favorites-track');
+    const emptyState = document.getElementById('favorites-empty-state');
+    const counterBadge = document.getElementById('favorites-counter-badge');
+    const trackWrapper = container ? container.querySelector('.carousel-track-wrapper') : null;
     if (!container || !track) return;
 
     const favIds = window.ivtvStorage ? window.ivtvStorage.getFavorites() : [];
     const favChannels = window.IVTV_DATA.channels.filter(c => favIds.includes(c.id));
 
+    container.style.display = 'block';
+
     if (favChannels.length === 0) {
-      container.style.display = 'none';
+      track.innerHTML = '';
+      if (trackWrapper) trackWrapper.style.display = 'none';
+      if (emptyState) emptyState.style.display = 'block';
+      if (counterBadge) counterBadge.textContent = '0 Saved';
       return;
     }
 
-    container.style.display = 'block';
+    if (emptyState) emptyState.style.display = 'none';
+    if (trackWrapper) trackWrapper.style.display = 'block';
+    if (counterBadge) {
+      counterBadge.textContent = `${favChannels.length} ${favChannels.length === 1 ? 'Channel' : 'Channels'}`;
+    }
+
     track.innerHTML = favChannels.map(ch => `
       <div class="channel-card" data-channel-id="${ch.id}" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
         ${this.buildChannelCardInner(ch, true)}
       </div>
     `).join('');
+
+    this.initCarouselMouseNavigation();
   }
 
   // ==========================================================================
@@ -569,13 +1095,19 @@ class UIController {
     const grid = document.getElementById('genre-grid');
     if (!grid) return;
 
-    grid.innerHTML = window.IVTV_DATA.genres.map(g => `
-      <div class="genre-tile" onclick="window.UIControllerInstance.filterByGenre('${g.category}')">
-        <div class="genre-tile-backdrop" style="background: ${g.gradient};"></div>
-        <div class="genre-tile-gradient"></div>
-        <div class="genre-tile-title">${g.icon} ${g.name}</div>
-      </div>
-    `).join('');
+    grid.innerHTML = window.IVTV_DATA.genres.map(g => {
+      const imgHtml = g.image 
+        ? `<img src="${g.image}" class="genre-tile-backdrop" alt="${g.name}">` 
+        : `<div class="genre-tile-backdrop" style="background: ${g.gradient};"></div>`;
+
+      return `
+        <div class="genre-tile" onclick="window.UIControllerInstance.filterByGenre('${g.category}')">
+          ${imgHtml}
+          <div class="genre-tile-gradient"></div>
+          <div class="genre-tile-title">${g.icon} ${g.name}</div>
+        </div>
+      `;
+    }).join('');
   }
 
   filterByGenre(category) {
@@ -713,13 +1245,9 @@ class UIController {
     if (!gridLayout || !window.ivtvEPG) return;
 
     const now = new Date();
-    // Anchor to 18:00 if currently in evening (18-24), otherwise start at current hour
+    // Dynamically start timeline 1 hour prior to current hour for immediate live visibility
     const windowStart = new Date(now);
-    if (now.getHours() >= 18) {
-      windowStart.setHours(18, 0, 0, 0);
-    } else {
-      windowStart.setMinutes(0, 0, 0);
-    }
+    windowStart.setHours(Math.max(0, now.getHours() - 1), 0, 0, 0);
 
     const windowHours = 6;
     const windowDurationMinutes = windowHours * 60;
@@ -842,7 +1370,7 @@ class UIController {
       tagEl.className = `epg-program-badge ${isLive ? 'live-tag' : ''}`;
     }
     if (titleEl) titleEl.textContent = prog.title;
-    if (chEl) chEl.textContent = channel.name;
+    if (chEl) chEl.textContent = `${channel.name} • ${prog.source || 'Official Guide'}`;
     if (timeEl) timeEl.textContent = `${prog.startTimeFormatted} - ${prog.endTimeFormatted} (${prog.durationMinutes} mins)`;
     if (descEl) descEl.textContent = prog.desc;
     if (actionText) actionText.textContent = isLive ? 'Watch Live Now' : 'Tune in to Channel';
@@ -953,6 +1481,14 @@ class UIController {
       }
     });
 
+    // Real-Time Views & Watch Tracking Listener
+    window.addEventListener('ivtv:views-updated', () => {
+      this.renderTopRanked();
+      if (this.allChannelsSort === 'views') {
+        this.renderAllUKChannels();
+      }
+    });
+
     // Hero Nav Buttons
     const heroPrev = document.getElementById('hero-prev-btn');
     const heroNext = document.getElementById('hero-next-btn');
@@ -960,32 +1496,145 @@ class UIController {
     if (heroNext) heroNext.onclick = () => this.nextHeroSlide();
 
     // Nav Category Pills
+    // Brand Logo Home Link
+    const brandLink = document.getElementById('brand-home-link');
+    if (brandLink) {
+      brandLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        document.querySelectorAll('.nav-pill-btn').forEach(b => b.classList.remove('active'));
+        const homePill = document.querySelector('.nav-pill-btn[data-nav="home"]');
+        if (homePill) homePill.classList.add('active');
+      });
+    }
+
+    // Nav Category Pills
     document.querySelectorAll('.nav-pill-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
         document.querySelectorAll('.nav-pill-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const filter = btn.dataset.nav;
+
         if (filter === 'guide') {
           this.openTVGuide();
           return;
         }
+
         if (filter === 'favorites') {
           const favSection = document.getElementById('favorites-section');
           if (favSection) {
-            favSection.style.display = 'block';
-            favSection.scrollIntoView({ behavior: 'smooth' });
+            this.renderFavoritesRow();
+            favSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
-        } else if (filter === 'all') {
+          return;
+        }
+
+        if (filter === 'home') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
+        if (filter === 'freeview') {
+          const fvSec = document.getElementById('freeview-section');
+          if (fvSec) fvSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+
+        if (filter === 'sky') {
+          const skySec = document.getElementById('sky-channels-section');
+          if (skySec) skySec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+
+        if (filter === 'all') {
           this.activeFilter = 'all';
-          this.applyFilter();
           const allSection = document.getElementById('all-uk-channels-section');
           if (allSection) {
-            allSection.scrollIntoView({ behavior: 'smooth' });
+            allSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
-        } else {
-          this.activeFilter = filter;
-          this.applyFilter();
+          const allPill = document.querySelector('.filter-pill[data-category="all"]');
+          if (allPill) allPill.click();
+          return;
         }
+
+        this.activeFilter = filter;
+        const secMap = {
+          'Entertainment': 'entertainment-section',
+          'Cinema': 'cinema-section',
+          'News': 'news-section',
+          'Sports': 'sports-section'
+        };
+        const targetId = secMap[filter];
+        const sec = targetId ? document.getElementById(targetId) : null;
+        if (sec) {
+          sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    // Reset Freeview Order Action
+    const resetFreeviewBtn = document.getElementById('freeview-reset-order-btn');
+    if (resetFreeviewBtn) {
+      resetFreeviewBtn.addEventListener('click', () => {
+        this.resetFreeviewOrder();
+      });
+    }
+
+    // Automatic Navbar ScrollSpy to keep active button in sync with scroll position
+    let scrollSpyTimer = null;
+    window.addEventListener('scroll', () => {
+      if (scrollSpyTimer) return;
+      scrollSpyTimer = setTimeout(() => {
+        scrollSpyTimer = null;
+        const scrollY = window.scrollY;
+        if (scrollY < 450) {
+          document.querySelectorAll('.nav-pill-btn').forEach(b => b.classList.remove('active'));
+          const homeBtn = document.querySelector('.nav-pill-btn[data-nav="home"]');
+          if (homeBtn) homeBtn.classList.add('active');
+          return;
+        }
+
+        const sections = [
+          { id: 'all-uk-channels-section', nav: 'all' },
+          { id: 'cinema-section', nav: 'Cinema' },
+          { id: 'news-section', nav: 'News' },
+          { id: 'sports-section', nav: 'Sports' },
+          { id: 'sky-channels-section', nav: 'sky' },
+          { id: 'freeview-section', nav: 'freeview' },
+          { id: 'favorites-section', nav: 'favorites' }
+        ];
+
+        for (const secInfo of sections) {
+          const el = document.getElementById(secInfo.id);
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            if (rect.top <= 200 && rect.bottom > 120) {
+              document.querySelectorAll('.nav-pill-btn').forEach(b => b.classList.remove('active'));
+              const targetBtn = document.querySelector(`.nav-pill-btn[data-nav="${secInfo.nav}"]`);
+              if (targetBtn) targetBtn.classList.add('active');
+              break;
+            }
+          }
+        }
+      }, 100);
+    }, { passive: true });
+
+    // Sky Channels Subcategory Pills
+    document.querySelectorAll('#sky-subpills .subpill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#sky-subpills .subpill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.renderSkyChannels(btn.dataset.skyFilter);
+      });
+    });
+
+    // Sports Arena Subcategory Pills
+    document.querySelectorAll('#sports-subpills .subpill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#sports-subpills .subpill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.renderSportsSection(btn.dataset.sportsFilter);
       });
     });
 
@@ -996,6 +1645,35 @@ class UIController {
     if (guideModal) {
       guideModal.addEventListener('click', (e) => {
         if (e.target === guideModal) this.closeTVGuide();
+      });
+    }
+
+    // TV Guide On-Demand Live Sync Button
+    const epgSyncBtn = document.getElementById('epg-sync-btn');
+    if (epgSyncBtn) {
+      epgSyncBtn.addEventListener('click', async () => {
+        const icon = document.getElementById('epg-sync-icon');
+        const text = document.getElementById('epg-sync-text');
+        if (icon) icon.classList.add('rotating');
+        if (text) text.textContent = 'Syncing...';
+        epgSyncBtn.disabled = true;
+
+        try {
+          if (window.ivtvEPG && typeof window.ivtvEPG.refreshLiveEPG === 'function') {
+            await window.ivtvEPG.refreshLiveEPG();
+          }
+          if (text) text.textContent = 'Synced ✓';
+          this.showToast('TV Guide updated with latest live broadcast schedules', 'success');
+        } catch (err) {
+          if (text) text.textContent = 'Sync Failed';
+          this.showToast('Failed to refresh TV guide', 'error');
+        } finally {
+          setTimeout(() => {
+            if (icon) icon.classList.remove('rotating');
+            if (text) text.textContent = 'Sync Guide';
+            epgSyncBtn.disabled = false;
+          }, 2000);
+        }
       });
     }
 
@@ -1037,19 +1715,21 @@ class UIController {
       searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
     }
 
-    // Carousel Scroll Nav Buttons
-    document.querySelectorAll('.carousel-nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const targetId = btn.dataset.target;
-        const track = document.getElementById(targetId);
-        if (track) {
-          const scrollAmount = track.clientWidth * 0.75;
-          track.scrollBy({
-            left: btn.classList.contains('prev') ? -scrollAmount : scrollAmount,
-            behavior: 'smooth'
-          });
-        }
-      });
+    // Carousel Scroll Nav Buttons (Robust event delegation across all carousels)
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.carousel-nav-btn');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const targetId = btn.dataset.target;
+      const track = targetId ? document.getElementById(targetId) : null;
+      if (track) {
+        const scrollAmount = Math.max(320, track.clientWidth * 0.75);
+        track.scrollBy({
+          left: btn.classList.contains('prev') ? -scrollAmount : scrollAmount,
+          behavior: 'smooth'
+        });
+      }
     });
 
     // Listen to storage changes
@@ -1058,8 +1738,152 @@ class UIController {
       this.renderTopRanked();
       this.renderAllUKChannels();
     });
+
+    // Initialize Mouse Wheel & Drag-to-Scroll on all carousels
+    this.initCarouselMouseNavigation();
+  }
+
+  // ==========================================================================
+  // CAROUSEL MOUSE WHEEL & DRAG-TO-SCROLL ENGINE
+  // ==========================================================================
+
+  initCarouselMouseNavigation() {
+    // Select all horizontal tracks across home, hero, categories, and player
+    const tracks = document.querySelectorAll('.carousel-track, .hero-thumbnails-row, .ranked-channels-track, #theater-surf-list');
+    tracks.forEach(track => this.enableHorizontalScrollAndDrag(track));
+  }
+
+  enableHorizontalScrollAndDrag(track) {
+    if (!track || track._hasScrollDragInit) return;
+    track._hasScrollDragInit = true;
+
+    // 1. Mouse Wheel Scroll -> Smooth Horizontal Scroll
+    track.addEventListener('wheel', (e) => {
+      // If predominantly vertical scroll
+      if (Math.abs(e.deltaY) >= Math.abs(e.deltaX) && Math.abs(e.deltaY) > 0) {
+        const canScrollLeft = track.scrollLeft > 0;
+        const canScrollRight = track.scrollLeft < (track.scrollWidth - track.clientWidth - 2);
+
+        if ((e.deltaY < 0 && canScrollLeft) || (e.deltaY > 0 && canScrollRight)) {
+          e.preventDefault();
+          track.scrollBy({
+            left: e.deltaY * 1.35,
+            behavior: 'smooth'
+          });
+        }
+      }
+    }, { passive: false });
+
+    // For Freeview track, cards have dedicated drag-and-drop to rearrange
+    if (track.id === 'freeview-track') {
+      return;
+    }
+
+    // 2. Mouse Click-and-Drag (Kinetic Grab-to-Scroll)
+    let isDown = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let hasDragged = false;
+    let velocity = 0;
+    let lastX = 0;
+    let lastTime = 0;
+
+    track.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button') || e.target.closest('input') || e.button !== 0) return;
+      isDown = true;
+      hasDragged = false;
+      startX = e.pageX;
+      startScrollLeft = track.scrollLeft;
+      lastX = e.pageX;
+      lastTime = Date.now();
+      velocity = 0;
+      // Do NOT add is-dragging on mousedown! Only add it once the user actually moves > 5px.
+    });
+
+    const onMouseMove = (e) => {
+      if (!isDown) return;
+      const x = e.pageX;
+      const walk = x - startX;
+      if (Math.abs(walk) > 5) {
+        hasDragged = true;
+        track.classList.add('is-dragging');
+      }
+      if (hasDragged) {
+        e.preventDefault();
+        track.scrollLeft = startScrollLeft - walk;
+        const now = Date.now();
+        const dt = now - lastTime;
+        if (dt > 0) {
+          velocity = (x - lastX) / dt;
+        }
+        lastX = x;
+        lastTime = now;
+      }
+    };
+
+    const onMouseUp = () => {
+      if (!isDown) return;
+      isDown = false;
+      track.classList.remove('is-dragging');
+
+      if (hasDragged && Math.abs(velocity) > 0.2) {
+        const momentumScroll = -velocity * 220;
+        track.scrollBy({
+          left: momentumScroll,
+          behavior: 'smooth'
+        });
+      }
+
+      if (hasDragged) {
+        const captureClick = (ev) => {
+          ev.stopImmediatePropagation();
+          ev.preventDefault();
+        };
+        track.addEventListener('click', captureClick, { capture: true, once: true });
+        setTimeout(() => {
+          track.removeEventListener('click', captureClick, { capture: true });
+        }, 120);
+      }
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.style.cssText = `
+      background: rgba(14, 24, 18, 0.95);
+      border: 1px solid ${type === 'success' ? '#00f076' : type === 'error' ? '#ff5252' : '#38bdf8'};
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(16px);
+      color: #ffffff;
+      padding: 0.85rem 1.25rem;
+      border-radius: 12px;
+      margin-bottom: 0.75rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      pointer-events: auto;
+    `;
+    const icon = type === 'success' ? '✓' : type === 'error' ? '⚠' : 'ℹ';
+    toast.innerHTML = `<span style="color:${type === 'success' ? '#00f076' : type === 'error' ? '#ff5252' : '#38bdf8'}; font-weight:800; font-size:1.1rem;">${icon}</span> <span>${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px)';
+      toast.style.transition = 'all 0.3s ease';
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
   }
 }
 
 // Global UI controller instance
 window.UIControllerInstance = new UIController();
+window.enableHorizontalScrollAndDrag = (el) => window.UIControllerInstance.enableHorizontalScrollAndDrag(el);

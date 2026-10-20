@@ -20,3 +20,11 @@ desktop.ini
 
 # Logs and temporary files
 *.log
+
+# Backups & Restore Points
+IV-TV-backup.zip
+restore_points/*
+!restore_points/.gitkeep
+scratch/
+
+

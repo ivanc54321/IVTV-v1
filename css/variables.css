@@ -1,47 +1,62 @@
 /* ==========================================================================
    IVTV DESIGN SYSTEM VARIABLES
-   Inspired by CinemaOS / Dark-Glass Streaming Aggregator UI
+   Aesthetic: Neon Green & Dark Gray (Inspired by CinemaOS Streaming UI)
    ========================================================================== */
 
 :root {
-  /* Color Palette */
-  --bg-primary: #060908;
-  --bg-secondary: #0a0f0d;
-  --bg-surface: #101714;
-  --bg-surface-elevated: #16201c;
-  --bg-glass: rgba(16, 23, 20, 0.65);
-  --bg-glass-heavy: rgba(10, 15, 13, 0.88);
-  --bg-glass-card: rgba(20, 29, 25, 0.55);
-  --bg-glass-hover: rgba(30, 44, 38, 0.75);
+  /* Dark Gray Charcoal & Obsidian Canvas */
+  --bg-primary: #0b0e11;
+  --bg-secondary: #101419;
+  --bg-surface: #151a22;
+  --bg-surface-elevated: #1b222c;
+  --bg-card: #131820;
+  --bg-card-hover: #181f2a;
+  
+  /* Translucent Glass Layers (Dark Gray with subtle blur) */
+  --bg-glass: rgba(16, 21, 28, 0.78);
+  --bg-glass-heavy: rgba(11, 14, 17, 0.94);
+  --bg-glass-card: rgba(21, 27, 36, 0.68);
+  --bg-glass-hover: rgba(28, 36, 48, 0.88);
 
-  /* Accent Colors */
-  --accent-emerald: #00f076;
-  --accent-emerald-dim: rgba(0, 240, 118, 0.15);
-  --accent-emerald-glow: rgba(0, 240, 118, 0.35);
-  --accent-cyan: #00e5ff;
+  /* Signature Neon Green Accents */
+  --accent-neon: #00ff88;
+  --accent-neon-bright: #2bfda0;
+  --accent-neon-glow: rgba(0, 255, 136, 0.45);
+  --accent-neon-dim: rgba(0, 255, 136, 0.12);
+  --accent-neon-subtle: rgba(0, 255, 136, 0.05);
+
+  /* Legacy variable mappings to maintain compatibility */
+  --accent-emerald: #00ff88;
+  --accent-emerald-dim: rgba(0, 255, 136, 0.14);
+  --accent-emerald-glow: rgba(0, 255, 136, 0.4);
+
+  /* Supporting Utility Accents */
+  --accent-cyan: #00f0ff;
   --accent-gold: #fbbf24;
   --accent-red: #ef4444;
   --accent-red-glow: rgba(239, 68, 68, 0.4);
 
-  /* Text Colors */
+  /* Typography / Neutral Grayscale */
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --text-dim: #475569;
 
-  /* Borders & Outlines */
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-medium: rgba(255, 255, 255, 0.15);
-  --border-focus: rgba(0, 240, 118, 0.6);
-  --border-glass: 1px solid rgba(255, 255, 255, 0.08);
+  /* Borders & Dark Gray Outlines */
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-medium: rgba(255, 255, 255, 0.14);
+  --border-focus: rgba(0, 255, 136, 0.7);
+  --border-glass: 1px solid rgba(255, 255, 255, 0.07);
+  --border-neon: 1px solid rgba(0, 255, 136, 0.4);
 
-  /* Shadows & Glows */
+  /* Shadows & Neon Ambient Halos */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.8);
-  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-  --glow-emerald: 0 0 24px rgba(0, 240, 118, 0.25);
-  --glow-card-hover: 0 12px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 240, 118, 0.15);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.85);
+  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+  --glow-neon: 0 0 28px rgba(0, 255, 136, 0.35);
+  --glow-emerald: 0 0 28px rgba(0, 255, 136, 0.35);
+  --glow-card-hover: 0 16px 36px rgba(0, 0, 0, 0.85), 0 0 24px rgba(0, 255, 136, 0.22);
 
   /* Typography */
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -59,7 +74,7 @@
   --transition-normal: 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   --transition-smooth: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Giant Number Stroke Effect */
-  --numeral-stroke: 2.5px rgba(255, 255, 255, 0.2);
+  /* Giant Number Stroke Effect (Left-aligned ranked numerals) */
+  --numeral-stroke: 2.5px rgba(255, 255, 255, 0.28);
   --numeral-fill: transparent;
 }
