@@ -23,6 +23,7 @@ class UIController {
   }
 
   init() {
+    this.setupHeroActions();
     this.renderHero();
     this.renderTopRanked();
     this.renderFreeviewSection();
@@ -31,7 +32,6 @@ class UIController {
     this.renderEPG();
     this.setupEPGClock();
     this.setupHeroAutoSlide();
-    this.setupHeroActions();
     this.setupEventListeners();
 
     // Expose global hero tuner for buttons and hotkeys
