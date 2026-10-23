@@ -122,6 +122,17 @@ body::before {
   max-width: 1440px;
 }
 
+@media (min-width: 1101px) {
+  .app-header {
+    padding: 0;
+  }
+
+  .header-inner {
+    max-width: 1680px;
+    padding: 0 2rem;
+  }
+}
+
 /* Standalone Brand Logo (Seamless, Bold Floating Brandmark - No Button/Background) */
 .brand-logo {
   pointer-events: auto;
@@ -162,7 +173,7 @@ body::before {
 
 /* Authored Brand Logo Image - Extra Large & Crisp (No Glow) */
 .brand-logo-image {
-  height: 80px;
+  height: 60px;
   width: auto;
   max-width: 360px;
   display: block;
@@ -185,13 +196,13 @@ body::before {
 
 @media (max-width: 1024px) {
   .brand-logo-image {
-    height: 62px;
+    height: 52px;
   }
 }
 
 @media (max-width: 768px) {
   .brand-logo-image {
-    height: 48px;
+    height: 40px;
   }
 }
 
@@ -337,6 +348,16 @@ body::before {
   background: var(--bg-glass-heavy);
   border-color: rgba(255, 255, 255, 0.14);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.85);
+}
+
+.app-header.scrolled .brand-logo {
+  order: 2;
+}
+
+.app-header.scrolled .navbar-glass {
+  order: 1;
+  margin-left: 0;
+  margin-right: auto;
 }
 
 /* ==========================================================================

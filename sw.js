@@ -3,7 +3,7 @@
    Enables 100% Offline Capability, Local Shell Caching & Instant Standalone Launch
    ========================================================================== */
 
-const CACHE_NAME = 'ivtv-cache-v27';
+const CACHE_NAME = 'ivtv-cache-v32';
 const PRECACHE_ASSETS = [
   "./",
   "./index.html",
@@ -30,6 +30,8 @@ const PRECACHE_ASSETS = [
   "./assets/fonts/QGYvz_MVcBeNP4NJtEtq.woff2",
   "./assets/fonts/QGYvz_MVcBeNP4NJuktqQ4E.woff2",
   "./assets/images/hero-cinema-neon.jpg",
+  "./assets/images/sky-hero.jpeg",
+  "./assets/images/UK TV.jpeg",
   "./assets/images/hero-sports-neon.jpg",
   "./assets/images/hero-news-neon.jpg",
   "./assets/images/hero-drama-neon.jpg",

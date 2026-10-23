@@ -1071,8 +1071,7 @@ class PlayerController {
     const logoSrc = channel.logo || channel.logoUrl || '';
     const logoTag = logoSrc ? `<img src="${logoSrc}" class="theater-channel-logo" alt="${channel.name}">` : '';
     document.getElementById('theater-channel-title').innerHTML = `${logoTag}<span>${channel.name}${chNumStr}</span>`;
-    document.getElementById('theater-channel-category').textContent = channel.category;
-    document.getElementById('theater-channel-views').textContent = `${channel.views} viewers`;
+    this.updateTheaterViewerCount(channel);
     this.updatePlayerFavState();
     this.updatePlayerEPGTicker(channel.id);
     this.updatePlayPauseUI(true);
@@ -1834,10 +1833,7 @@ class PlayerController {
       if (this.isOpen && this.video && !this.video.paused && this.video.currentTime > 0) {
         if (window.ivtvStorage && this.currentChannel) {
           window.ivtvStorage.trackWatchDuration(this.currentChannel.id, 20);
-          const viewsHeader = document.getElementById('theater-channel-views');
-          if (viewsHeader && this.currentChannel.views) {
-            viewsHeader.textContent = `${this.currentChannel.views} viewers`;
-          }
+          this.updateTheaterViewerCount(this.currentChannel);
         }
       }
     }, 20000);
@@ -2039,10 +2035,11 @@ class PlayerController {
     const fsBtn = document.getElementById('theater-fs-btn');
     if (fsBtn) {
       fsBtn.classList.toggle('active', isFs);
-      fsBtn.setAttribute('title', isFs ? 'Exit Fullscreen (F or Esc)' : 'Fullscreen (F)');
-      const text = fsBtn.querySelector('span');
+      const label = isFs ? 'Exit Fullscreen' : 'Fullscreen';
+      fsBtn.setAttribute('aria-label', label);
+      const text = fsBtn.querySelector('.theater-control-tooltip');
       const svg = fsBtn.querySelector('svg');
-      if (text) text.textContent = isFs ? 'Exit Full' : 'Fullscreen';
+      if (text) text.textContent = label;
       if (svg) {
         svg.innerHTML = isFs
           ? '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>'
@@ -2110,7 +2107,6 @@ class PlayerController {
     const chNum = document.getElementById('osd-channel-num');
     const chName = document.getElementById('osd-channel-name');
     const category = document.getElementById('osd-category');
-    const views = document.getElementById('osd-views');
     const progTitle = document.getElementById('osd-program-title');
     const progTime = document.getElementById('osd-program-time');
 
@@ -2122,7 +2118,6 @@ class PlayerController {
     if (chNum) chNum.textContent = channel.chNumber ? `CH ${channel.chNumber}` : `CH 00`;
     if (chName) chName.textContent = channel.name;
     if (category) category.textContent = channel.category;
-    if (views) views.textContent = `${channel.views} viewers`;
 
     if (window.ivtvEPG) {
       const prog = window.ivtvEPG.getCurrentProgram(channel.id);
@@ -2140,6 +2135,13 @@ class PlayerController {
     this.osdTimer = setTimeout(() => {
       osd.classList.add('hidden');
     }, 2800);
+  }
+
+  updateTheaterViewerCount(channel) {
+    const viewerCount = document.querySelector('#theater-viewers-count span');
+    if (viewerCount) {
+      viewerCount.textContent = channel.views ? `${channel.views} viewers` : 'Viewers unavailable';
+    }
   }
 
   applyAspectRatio(mode = 'stretch', showNotification = false) {

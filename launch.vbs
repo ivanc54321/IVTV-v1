@@ -96,12 +96,12 @@ If Not useBrowserOnly Then
     End If
 
     If browserExe <> "" Then
-        browserArgs = "--app=http://127.0.0.1:5173/?v=59 --start-maximized --autoplay-policy=no-user-gesture-required --disable-features=Translate"
+        browserArgs = "--app=http://127.0.0.1:5173/?v=67 --start-maximized --autoplay-policy=no-user-gesture-required --disable-features=Translate"
         oShell.Run """" & browserExe & """ " & browserArgs, 1, False
         browserLaunched = True
     End If
 End If
 
 If Not browserLaunched Then
-    oShell.Run "http://127.0.0.1:5173/?v=59"
+    oShell.Run "http://127.0.0.1:5173/?v=67"
 End If

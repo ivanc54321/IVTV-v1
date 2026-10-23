@@ -197,7 +197,10 @@ class UIController {
     const paginationContainer = document.getElementById('hero-pagination');
 
     if (thumbsContainer) {
-      thumbsContainer.innerHTML = showcases.map((s, idx) => `
+      thumbsContainer.innerHTML = showcases
+        .map((showcase, index) => ({ showcase, index }))
+        .filter(({ showcase }) => !showcase.video)
+        .map(({ showcase: s, index: idx }) => `
         <div class="hero-thumb-card ${idx === this.currentHeroIndex ? 'active' : ''}" data-index="${idx}">
           <img class="hero-thumb-img" src="${s.image}" alt="${s.title}">
           <div class="hero-thumb-overlay">

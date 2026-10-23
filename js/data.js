@@ -1309,36 +1309,25 @@ const IVTV_DATA = {
     },
     {
       id: "hero-streaming-universe",
-      channelId: "sky-cinema-premiere-uk",
-      title: "BLOCKBUSTERS & HIT PREMIERES",
-      subtitle: "SKY CINEMA & ENTERTAINMENT",
+      channelId: "sky-atlantic-uk",
+      title: "SKY TV",
+      subtitle: "ENTERTAINMENT • CINEMA • MORE",
       rating: 4.9,
-      category: "Cinema",
-      badges: ["CH 301", "4K ULTRA HD", "SKY CINEMA", "PREMIERE", "NOW STREAMING"],
-      synopsis: "Stream world-class television, award-winning sci-fi blockbusters, and Hollywood cinema hits. Live Sky Cinema premieres, exclusive originals, and 4K theatre mode in one destination.",
-      image: "assets/images/hero-cinema-neon.jpg"
-    },
-    {
-      id: "hero-film4-cinema",
-      channelId: "film4-uk",
-      title: "HOLLYWOOD MOVIES & INDIE CINEMA",
-      subtitle: "FILM4 • CH 313",
-      rating: 4.8,
-      category: "Cinema",
-      badges: ["CH 313", "CINEMA HITS", "OSCAR WINNERS", "380K VIEWERS", "NOW STREAMING"],
-      synopsis: "The UK's celebrated movie destination. Acclaimed Hollywood blockbusters, modern cinema gems, and award-winning international motion pictures broadcasting in pristine HD.",
-      image: "assets/images/hero-action.jpg"
+      category: "Sky TV",
+      badges: ["SKY CHANNELS", "ENTERTAINMENT", "CINEMA", "LIVE TV"],
+      synopsis: "Explore Sky TV, from acclaimed entertainment and drama to cinema, news, and more—all in one place.",
+      image: "assets/images/sky-hero.jpeg"
     },
     {
       id: "hero-news-wire",
-      channelId: "sky-news",
-      title: "GLOBAL WIRE & BREAKING NEWS",
-      subtitle: "SKY NEWS LIVE • CH 501",
+      channelId: "bbc-one-uk",
+      title: "UK TV",
+      subtitle: "UK CHANNELS • LIVE TV",
       rating: 4.8,
-      category: "News",
-      badges: ["CH 501", "24/7 LIVE WIRE", "BREAKING NEWS", "HD BROADCAST"],
-      synopsis: "Unrivalled 24/7 world news coverage, live studio broadcasts, expert analysis, international correspondents, and real-time market updates.",
-      image: "assets/images/hero-news-neon.jpg"
+      category: "UK TV",
+      badges: ["UK CHANNELS", "LIVE TV", "BBC ONE"],
+      synopsis: "Explore UK television, from familiar broadcast channels to live entertainment.",
+      image: "assets/images/UK TV.jpeg"
     },
     {
       id: "hero-entertainment-universe",
