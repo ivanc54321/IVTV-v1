@@ -37,12 +37,15 @@ class PlayerController {
     this.lastStallTime = 0;
     this.engineMode = 'direct'; // 'direct' | 'mirror' | 'youtube'
     this.fallbackEmbedUrl = '';
-    this.fatalErrorCount = 0;
-    this.aspectRatioMode = 'fit'; // 'fit' | 'fill' | 'stretch'
-    this.surfCategory = 'all';
+    this.aspectRatioMode = localStorage.getItem('ivtv_player_aspect') || 'stretch'; // Default 'stretch' ('stretch' | 'fit' | 'fill')
     this.surfQuery = '';
     this.osdTimer = null;
     this.controlsHideTimer = null;
+    this.isSideGuideOpen = false;
+    this.sideGuideCategory = 'all';
+    this.sideGuideQuery = '';
+    this.sideGuideClockTimer = null;
+    this.justDraggedSideGuide = false;
   }
 
   init() {
@@ -271,10 +274,24 @@ class PlayerController {
       favBtn.addEventListener('click', () => this.togglePlayerFavorite());
     }
 
-    // Cinema Wide Mode Toggle Button
-    const wideBtn = document.getElementById('theater-cinema-mode-btn');
-    if (wideBtn) {
-      wideBtn.addEventListener('click', () => this.toggleCinemaWide());
+    // Play / Pause Toggle Button
+    const playPauseBtn = document.getElementById('theater-play-pause-btn');
+    if (playPauseBtn) {
+      playPauseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.togglePlayPause();
+      });
+    }
+
+    if (this.video) {
+      this.video.addEventListener('click', (e) => {
+        if (e.target !== this.video) return;
+        e.stopPropagation();
+        this.togglePlayPause();
+      });
+      this.video.addEventListener('play', () => this.updatePlayPauseUI(true));
+      this.video.addEventListener('pause', () => this.updatePlayPauseUI(false));
     }
 
     // Prev / Next Channel Zapper Buttons
@@ -292,12 +309,16 @@ class PlayerController {
     if (aspectBtn) {
       aspectBtn.addEventListener('click', () => this.toggleAspectRatio());
     }
+    // Initialize aspect ratio mode
+    this.applyAspectRatio(this.aspectRatioMode, false);
 
     // Channel Surf Drawer Category Filter Pills
     const surfCats = document.getElementById('theater-surf-cats');
     if (surfCats) {
       surfCats.querySelectorAll('.surf-cat-pill').forEach(pill => {
-        pill.addEventListener('click', () => {
+        pill.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           surfCats.querySelectorAll('.surf-cat-pill').forEach(p => p.classList.remove('active'));
           pill.classList.add('active');
           this.surfCategory = pill.dataset.category || 'all';
@@ -309,7 +330,10 @@ class PlayerController {
     // Channel Surf Drawer Real-time Search
     const surfSearch = document.getElementById('theater-surf-search');
     if (surfSearch) {
+      surfSearch.addEventListener('click', (e) => e.stopPropagation());
+      surfSearch.addEventListener('keydown', (e) => e.stopPropagation());
       surfSearch.addEventListener('input', (e) => {
+        e.stopPropagation();
         this.surfQuery = e.target.value.toLowerCase().trim();
         this.renderInPlayerSurfList(this.currentChannel?.category, this.currentChannel?.id);
       });
@@ -318,13 +342,21 @@ class PlayerController {
     // Channel Surf Drawer Toggle Button
     const surfToggleBtn = document.getElementById('theater-surf-toggle-btn');
     if (surfToggleBtn) {
-      surfToggleBtn.addEventListener('click', () => this.toggleSurfDrawer());
+      surfToggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleSurfDrawer();
+      });
     }
 
     // Channel Surf Drawer Close Button
     const surfCloseBtn = document.getElementById('theater-surf-close-btn');
     if (surfCloseBtn) {
-      surfCloseBtn.addEventListener('click', () => this.toggleSurfDrawer(false));
+      surfCloseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleSurfDrawer();
+      });
     }
 
     // Channel Surf Drawer Carousel Navigation Buttons (‹ and ›)
@@ -352,6 +384,50 @@ class PlayerController {
       });
     }
 
+    // In-Player Pop-from-Left TV Guide Drawer Toggle Button
+    const sideGuideBtn = document.getElementById('theater-guide-toggle-btn');
+    if (sideGuideBtn) {
+      sideGuideBtn.addEventListener('click', () => this.toggleSideGuide());
+    }
+
+    // Side TV Guide Close Button
+    const sideGuideCloseBtn = document.getElementById('theater-side-guide-close-btn');
+    if (sideGuideCloseBtn) {
+      sideGuideCloseBtn.addEventListener('click', () => this.toggleSideGuide(false));
+    }
+
+    // Side TV Guide Category Filter Pills
+    const sideGuideCats = document.getElementById('side-guide-categories');
+    if (sideGuideCats) {
+      sideGuideCats.querySelectorAll('.side-guide-cat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          sideGuideCats.querySelectorAll('.side-guide-cat-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.sideGuideCategory = btn.dataset.category || 'all';
+          this.renderSideGuideList();
+        });
+      });
+    }
+
+    // Side TV Guide Live Search Input
+    const sideGuideSearch = document.getElementById('side-guide-search-input');
+    if (sideGuideSearch) {
+      sideGuideSearch.addEventListener('input', (e) => {
+        this.sideGuideQuery = e.target.value.toLowerCase().trim();
+        this.renderSideGuideList();
+      });
+    }
+
+    // Initialize TV Guide slide out mouse scrolling & grab-to-scroll engine
+    this.initSideGuideMouseNavigation();
+
+    // Side Guide Clock Timer
+    setInterval(() => {
+      if (this.isOpen && this.isSideGuideOpen) {
+        this.updateSideGuideClock();
+      }
+    }, 1000);
+
     // Auto-hide controls when user is idle during playback
     const resetControlsTimer = () => {
       if (!this.isOpen || !this.modalContainer) return;
@@ -364,7 +440,29 @@ class PlayerController {
         const isDrawerOpen = drawer && !drawer.classList.contains('collapsed');
         const popmenu = document.getElementById('theater-popmenu-wrapper');
         const isPopmenuOpen = popmenu && popmenu.classList.contains('open');
-        if (!isDrawerOpen && !isPopmenuOpen) {
+        const isSideGuideOpen = this.isSideGuideOpen;
+
+        // Never auto-hide controls during iframe / mirror playback (e.g. Channel 5)
+        const isIframeActive = this.modalContainer.classList.contains('has-iframe-active') ||
+                               (this.youtubeIframe && this.youtubeIframe.style.display !== 'none') ||
+                               this.engineMode === 'mirror' || 
+                               this.engineMode === 'embed';
+
+        // Keep bottom controls permanently visible in standard windowed theater mode
+        const isFs = !!(
+          document.fullscreenElement || 
+          document.webkitFullscreenElement ||
+          document.mozFullScreenElement ||
+          document.msFullscreenElement ||
+          this.modalContainer?.classList.contains('is-fullscreen')
+        );
+
+        if (isIframeActive || !isFs) {
+          this.modalContainer.classList.remove('controls-hidden');
+          return;
+        }
+
+        if (!isDrawerOpen && !isPopmenuOpen && !isSideGuideOpen) {
           this.modalContainer.classList.add('controls-hidden');
         }
       }, 3500);
@@ -398,6 +496,11 @@ class PlayerController {
     // Keyboard controls
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.isOpen) {
+        if (this.isSideGuideOpen) {
+          this.toggleSideGuide(false);
+          return;
+        }
+
         const popmenuWrapper = document.getElementById('theater-popmenu-wrapper');
         if (popmenuWrapper && popmenuWrapper.classList.contains('open')) {
           popmenuWrapper.classList.remove('open');
@@ -407,8 +510,8 @@ class PlayerController {
         }
 
         const isFs = !!(
-          document.fullscreenElement || 
-          document.webkitFullscreenElement || 
+          document.fullscreenElement ||
+          document.webkitFullscreenElement ||
           this.modalContainer?.classList.contains('is-fullscreen') ||
           this.modal?.classList.contains('is-fullscreen')
         );
@@ -418,6 +521,18 @@ class PlayerController {
         }
 
         this.closePlayer();
+      }
+      if ((e.key === 'g' || e.key === 'G') && this.isOpen && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        this.toggleSideGuide();
+      }
+      if ((e.key === ' ' || e.key === 'k' || e.key === 'K') && this.isOpen) {
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON')) {
+          // Do not hijack spacebar if user is interacting with an input or button
+          return;
+        }
+        e.preventDefault();
+        this.togglePlayPause();
       }
       if ((e.key === 'f' || e.key === 'F') && this.isOpen && document.activeElement.tagName !== 'INPUT') {
         this.toggleFullscreen();
@@ -490,6 +605,7 @@ class PlayerController {
   toggleSurfDrawer(forceState) {
     const drawer = document.getElementById('theater-surf-drawer');
     const toggleBtn = document.getElementById('theater-surf-toggle-btn');
+    const closeBtn = document.getElementById('theater-surf-close-btn');
     if (!drawer) return;
 
     if (forceState !== undefined) {
@@ -504,6 +620,7 @@ class PlayerController {
 
     const isVisible = !drawer.classList.contains('collapsed');
     if (toggleBtn) toggleBtn.classList.toggle('active', isVisible);
+    if (closeBtn) closeBtn.textContent = isVisible ? 'Hide ▲' : 'Show ▼';
 
     // Auto-scroll active channel into center view when opening drawer
     if (isVisible) {
@@ -513,6 +630,420 @@ class PlayerController {
           activeItem.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }
       }, 100);
+    }
+  }
+
+  toggleSideGuide(forceState) {
+    const drawer = document.getElementById('theater-side-guide');
+    const toggleBtn = document.getElementById('theater-guide-toggle-btn');
+    if (!drawer) return;
+
+    const nextState = forceState !== undefined ? forceState : !drawer.classList.contains('open');
+    this.isSideGuideOpen = nextState;
+
+    drawer.classList.toggle('open', nextState);
+    if (toggleBtn) toggleBtn.classList.toggle('active', nextState);
+
+    if (nextState) {
+      this.initSideGuideMouseNavigation();
+      this.renderSideGuideList();
+      this.updateSideGuideClock();
+      // Ensure controls stay visible while side guide is open
+      if (this.modalContainer) {
+        this.modalContainer.classList.remove('controls-hidden');
+      }
+      // If bottom surf drawer is open, collapse it
+      this.toggleSurfDrawer(false);
+      // Auto-scroll active card into view
+      setTimeout(() => {
+        const activeCard = drawer.querySelector('.side-guide-card.is-active');
+        if (activeCard) {
+          activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 120);
+    }
+  }
+
+  // ==========================================================================
+  // TV GUIDE SLIDE-OUT MOUSE SCROLL & DRAG ENGINE
+  // ==========================================================================
+  initSideGuideMouseNavigation() {
+    const drawer = document.getElementById('theater-side-guide');
+    const listWrap = document.getElementById('side-guide-list-wrap');
+    const catsEl = document.getElementById('side-guide-categories');
+
+    // 1. Isolate wheel events within entire drawer so they never leak to background or trigger volume changes
+    if (drawer && !drawer._hasMouseScrollInit) {
+      drawer._hasMouseScrollInit = true;
+      drawer.addEventListener('wheel', (e) => {
+        e.stopPropagation();
+      }, { passive: false });
+    }
+
+    // 2. Mouse Wheel on Category Filter Pills (Translate vertical wheel to horizontal scroll)
+    if (catsEl && !catsEl._hasWheelInit) {
+      catsEl._hasWheelInit = true;
+      catsEl.addEventListener('wheel', (e) => {
+        e.stopPropagation();
+        const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        if (!delta) return;
+
+        const canScrollLeft = catsEl.scrollLeft > 0;
+        const canScrollRight = catsEl.scrollLeft < (catsEl.scrollWidth - catsEl.clientWidth - 1);
+
+        if ((delta < 0 && canScrollLeft) || (delta > 0 && canScrollRight)) {
+          e.preventDefault();
+          catsEl.scrollLeft += delta * 1.15;
+        }
+      }, { passive: false });
+    }
+
+    // 3. Mouse Wheel and Kinetic Click-and-Drag (Grab-to-Scroll) on Listings
+    if (listWrap && !listWrap._hasMouseScrollInit) {
+      listWrap._hasMouseScrollInit = true;
+
+      // Mouse Wheel -> Smooth vertical scroll through channel listings
+      listWrap.addEventListener('wheel', (e) => {
+        e.stopPropagation();
+        const delta = e.deltaY;
+        if (!delta) return;
+
+        const canScrollUp = listWrap.scrollTop > 0;
+        const canScrollDown = listWrap.scrollTop < (listWrap.scrollHeight - listWrap.clientHeight - 1);
+
+        if ((delta < 0 && canScrollUp) || (delta > 0 && canScrollDown)) {
+          e.preventDefault();
+          listWrap.scrollTop += delta * 1.1;
+        }
+      }, { passive: false });
+
+      // Kinetic Click-and-Drag (Grab-to-Scroll)
+      let isDown = false;
+      let startY = 0;
+      let startScrollTop = 0;
+      let hasDragged = false;
+      let velocity = 0;
+      let lastY = 0;
+      let lastTime = 0;
+
+      listWrap.addEventListener('mousedown', (e) => {
+        if (e.target.closest('button') || e.target.closest('input') || e.button !== 0) return;
+        isDown = true;
+        hasDragged = false;
+        startY = e.pageY;
+        startScrollTop = listWrap.scrollTop;
+        lastY = e.pageY;
+        lastTime = Date.now();
+        velocity = 0;
+      });
+
+      const onMouseMove = (e) => {
+        if (!isDown) return;
+        const y = e.pageY;
+        const walk = y - startY;
+        if (Math.abs(walk) > 5) {
+          hasDragged = true;
+          this.justDraggedSideGuide = true;
+          listWrap.classList.add('is-dragging');
+        }
+        if (hasDragged) {
+          e.preventDefault();
+          listWrap.scrollTop = startScrollTop - walk;
+          const now = Date.now();
+          const dt = now - lastTime;
+          if (dt > 0) {
+            velocity = (y - lastY) / dt;
+          }
+          lastY = y;
+          lastTime = now;
+        }
+      };
+
+      const onMouseUp = () => {
+        if (!isDown) return;
+        isDown = false;
+        listWrap.classList.remove('is-dragging');
+
+        if (hasDragged && Math.abs(velocity) > 0.2) {
+          const momentum = -velocity * 180;
+          listWrap.scrollBy({
+            top: momentum,
+            behavior: 'smooth'
+          });
+        }
+
+        if (hasDragged) {
+          setTimeout(() => {
+            this.justDraggedSideGuide = false;
+          }, 140);
+        }
+      };
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+  }
+
+  updateSideGuideClock() {
+    const clockEl = document.getElementById('side-guide-clock');
+    if (!clockEl) return;
+    const now = new Date();
+    const h = now.getHours().toString().padStart(2, '0');
+    const m = now.getMinutes().toString().padStart(2, '0');
+    const s = now.getSeconds().toString().padStart(2, '0');
+    clockEl.textContent = `${h}:${m}:${s}`;
+  }
+
+  renderSideGuideList() {
+    const listEl = document.getElementById('theater-side-guide-list');
+    const counterEl = document.getElementById('side-guide-counter');
+    if (!listEl) return;
+
+    if (!window.IVTV_DATA?.channels) {
+      listEl.innerHTML = '<div class="side-guide-empty">No channels loaded</div>';
+      return;
+    }
+
+    let channels = [...window.IVTV_DATA.channels];
+
+    // Filter by Category
+    if (this.sideGuideCategory === 'Favorites') {
+      const favIds = window.ivtvStorage ? window.ivtvStorage.getFavorites() : [];
+      channels = channels.filter(c => favIds.includes(c.id));
+    } else if (this.sideGuideCategory && this.sideGuideCategory !== 'all') {
+      channels = channels.filter(c => c.category === this.sideGuideCategory);
+    }
+
+    // Filter by Search Query
+    if (this.sideGuideQuery) {
+      channels = channels.filter(c => {
+        const nameMatch = c.name.toLowerCase().includes(this.sideGuideQuery);
+        const numMatch = c.chNumber && c.chNumber.toString().includes(this.sideGuideQuery);
+        const catMatch = c.category && c.category.toLowerCase().includes(this.sideGuideQuery);
+        let progMatch = false;
+        if (window.ivtvEPG) {
+          const prog = window.ivtvEPG.getCurrentProgram(c.id);
+          if (prog && prog.title && prog.title.toLowerCase().includes(this.sideGuideQuery)) {
+            progMatch = true;
+          }
+        }
+        return nameMatch || numMatch || catMatch || progMatch;
+      });
+    }
+
+    if (counterEl) {
+      counterEl.textContent = `${channels.length} ${channels.length === 1 ? 'Guide' : 'Guides'}`;
+    }
+
+    if (channels.length === 0) {
+      listEl.innerHTML = `
+        <div class="side-guide-empty">
+          <div class="side-guide-empty-icon">📡</div>
+          <div style="font-weight: 700; color: #fff; margin-bottom: 0.25rem;">No channels found</div>
+          <div style="font-size: 0.78rem;">Try a different search term or category filter</div>
+        </div>
+      `;
+      return;
+    }
+
+    const currentId = this.currentChannel?.id;
+
+    listEl.innerHTML = channels.map(ch => {
+      const isActive = ch.id === currentId;
+      const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
+      const logoSrc = ch.logo || ch.logoUrl || '';
+      const fallbackLogo = ch.logoUrl || '';
+      const logoHtml = logoSrc
+        ? `<img src="${logoSrc}" class="side-guide-logo-img" alt="${ch.name}" loading="lazy" onerror="if(this.dataset.fb!=='1'&&'${fallbackLogo}'){this.dataset.fb='1';this.src='${fallbackLogo}';}else{this.style.display='none';}">`
+        : `<span style="font-size:0.65rem;font-weight:800;color:var(--accent-emerald);">${ch.name.substring(0, 3)}</span>`;
+
+      // Get real-time EPG program data
+      let nowTitle = 'Live Television Broadcast';
+      let nowTimeRange = 'Broadcasting Live';
+      let progressPercent = 50;
+      let minsLeft = 'LIVE';
+      let nextTitle = 'Upcoming Broadcast Schedule';
+      let nextTimeRange = 'Up Next';
+      let nextDuration = '';
+
+      if (window.ivtvEPG) {
+        const prog = window.ivtvEPG.getCurrentProgram(ch.id);
+        if (prog) {
+          nowTitle = prog.title || nowTitle;
+          nowTimeRange = `${prog.startTimeFormatted} - ${prog.endTimeFormatted}`;
+          progressPercent = prog.progressPercent !== undefined ? prog.progressPercent : 50;
+          minsLeft = prog.minutesLeft ? `${prog.minutesLeft}m left` : 'LIVE';
+
+          if (prog.next && prog.next.title) {
+            nextTitle = prog.next.title;
+            nextTimeRange = `${prog.next.startTimeFormatted || ''} - ${prog.next.endTimeFormatted || ''}`.trim();
+            if (prog.next.durationMinutes) {
+              nextDuration = `${prog.next.durationMinutes}m`;
+            }
+          } else {
+            // Find next upcoming show in schedule
+            const schedule = window.ivtvEPG.getScheduleForChannel(ch.id);
+            if (Array.isArray(schedule) && schedule.length > 1) {
+              const currentIdx = schedule.findIndex(s => s.title === prog.title);
+              const upcoming = (currentIdx >= 0 && schedule[currentIdx + 1]) ? schedule[currentIdx + 1] : schedule[1];
+              if (upcoming && upcoming.title) {
+                nextTitle = upcoming.title;
+                nextTimeRange = `${upcoming.startTimeFormatted || ''} - ${upcoming.endTimeFormatted || ''}`.trim();
+                if (upcoming.durationMinutes) {
+                  nextDuration = `${upcoming.durationMinutes}m`;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return `
+        <div class="side-guide-card ${isActive ? 'is-active' : ''}" data-channel-id="${ch.id}">
+          <div class="side-guide-card-top">
+            <div class="side-guide-channel-identity">
+              <div class="side-guide-logo-wrap">
+                ${logoHtml}
+              </div>
+              <div class="side-guide-channel-meta">
+                ${ch.chNumber ? `<span class="side-guide-channel-num">CH ${ch.chNumber}</span>` : ''}
+                <span class="side-guide-channel-name" title="${ch.name}">${ch.name}</span>
+              </div>
+            </div>
+            <div class="side-guide-badges-group">
+              ${isActive ? `<span class="side-guide-watching-pill"><span class="live-pulse-dot" style="width:5px;height:5px;"></span> WATCHING</span>` : ''}
+              <button type="button" class="side-guide-fav-btn ${isFav ? 'is-fav' : ''}" data-fav-id="${ch.id}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="${isFav ? '#fbbf24' : 'none'}" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Dual Schedule Grid: NOW and NEXT -->
+          <div class="side-guide-epg-dual-block">
+            <!-- 1. NOW PLAYING BLOCK -->
+            <div class="side-guide-now-box">
+              <div class="side-guide-section-header">
+                <span class="side-guide-now-tag">
+                  <span class="live-pulse-dot" style="width:5px;height:5px;background:#ef4444;box-shadow:0 0 6px #ef4444;"></span>
+                  NOW
+                </span>
+                <span class="side-guide-time-pill">${nowTimeRange}</span>
+              </div>
+              <div class="side-guide-prog-title" title="${nowTitle}">${nowTitle}</div>
+              <div class="side-guide-progress-wrap">
+                <div class="side-guide-progress-track">
+                  <div class="side-guide-progress-fill" style="width: ${progressPercent}%;"></div>
+                </div>
+                <span class="side-guide-mins-left">${minsLeft}</span>
+              </div>
+            </div>
+
+            <!-- 2. UP NEXT BLOCK -->
+            <div class="side-guide-next-box">
+              <div class="side-guide-section-header">
+                <span class="side-guide-next-tag">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                  NEXT
+                </span>
+                <span class="side-guide-time-pill next-time-pill">${nextTimeRange}</span>
+              </div>
+              <div class="side-guide-next-title" title="${nextTitle}">${nextTitle}</div>
+              ${nextDuration ? `
+                <div class="side-guide-next-meta">
+                  <span class="side-guide-next-duration">${nextDuration}</span>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Attach click listeners to cards
+    listEl.querySelectorAll('.side-guide-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (this.justDraggedSideGuide) return;
+        if (e.target.closest('.side-guide-fav-btn')) return;
+        const targetId = card.dataset.channelId;
+        if (targetId && targetId !== this.currentChannel?.id) {
+          this.openPlayer(targetId);
+        }
+      });
+    });
+
+    // Attach favorite toggle listeners
+    listEl.querySelectorAll('.side-guide-fav-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const chId = btn.dataset.favId;
+        if (chId && window.ivtvStorage) {
+          const added = window.ivtvStorage.toggleFavorite(chId);
+          btn.classList.toggle('is-fav', added);
+          const svg = btn.querySelector('svg');
+          if (svg) svg.setAttribute('fill', added ? '#fbbf24' : 'none');
+          if (this.currentChannel?.id === chId) {
+            this.updatePlayerFavState();
+          }
+          if (this.sideGuideCategory === 'Favorites') {
+            this.renderSideGuideList();
+          }
+        }
+      });
+    });
+  }
+
+  togglePlayPause() {
+    if (!this.video) return;
+
+    if (this.video.paused) {
+      this.video.play().then(() => {
+        this.updatePlayPauseUI(true);
+        if (window.showToast) window.showToast('Playback Resumed', 'info');
+      }).catch(err => {
+        console.warn('Play error:', err);
+      });
+    } else {
+      this.video.pause();
+      this.updatePlayPauseUI(false);
+      if (window.showToast) window.showToast('Playback Paused', 'info');
+    }
+  }
+
+  updatePlayPauseUI(isPlaying) {
+    const btn = document.getElementById('theater-play-pause-btn');
+    const icon = document.getElementById('theater-play-pause-icon');
+    const label = document.getElementById('theater-play-pause-label');
+
+    if (isPlaying) {
+      if (icon) {
+        icon.innerHTML = `
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
+          </svg>
+        `;
+      }
+      if (label) label.textContent = 'Pause';
+      if (btn) {
+        btn.classList.remove('is-paused');
+        btn.title = 'Pause Live Stream (Space or K)';
+      }
+    } else {
+      if (icon) {
+        icon.innerHTML = `
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6 4 20 12 6 20 6 4"/>
+          </svg>
+        `;
+      }
+      if (label) label.textContent = 'Play';
+      if (btn) {
+        btn.classList.add('is-paused');
+        btn.title = 'Play Live Stream (Space or K)';
+      }
     }
   }
 
@@ -544,6 +1075,8 @@ class PlayerController {
     document.getElementById('theater-channel-views').textContent = `${channel.views} viewers`;
     this.updatePlayerFavState();
     this.updatePlayerEPGTicker(channel.id);
+    this.updatePlayPauseUI(true);
+    this.applyAspectRatio(this.aspectRatioMode, false);
 
     // Dismiss any open EPG details modal or TV Guide modal
     if (window.UIControllerInstance) {
@@ -553,6 +1086,7 @@ class PlayerController {
 
     // Show modal
     this.modal.classList.add('active');
+    document.body.classList.add('theater-active');
     document.body.style.overflow = 'hidden';
 
     // Start playing ad-free stream
@@ -566,8 +1100,12 @@ class PlayerController {
       this.modalContainer.classList.remove('controls-hidden');
     }
 
-    // Populate in-player channel switcher
+    // Populate in-player channel switcher and ensure bottom surf drawer is open
     this.renderInPlayerSurfList(channel.category, channel.id);
+    this.toggleSurfDrawer(true);
+    if (this.isSideGuideOpen) {
+      this.renderSideGuideList();
+    }
   }
 
   updatePlayerEPGTicker(channelId) {
@@ -709,9 +1247,13 @@ class PlayerController {
 
     // Direct HD Native Video + Hls.js Mode
     this.setEngineUI('direct', 'Direct HD');
+    if (this.modalContainer) {
+      this.modalContainer.classList.remove('has-iframe-active');
+    }
     if (this.youtubeIframe) {
       this.youtubeIframe.src = '';
       this.youtubeIframe.style.display = 'none';
+      this.youtubeIframe.classList.remove('crop-channel5-nav');
     }
     if (this.video) {
       this.video.style.display = 'block';
@@ -740,11 +1282,16 @@ class PlayerController {
 
       if (data && data.success && data.type === 'youtube' && data.streamUrl) {
         this.setEngineUI('youtube', 'YouTube HD');
+        if (this.modalContainer) {
+          this.modalContainer.classList.add('has-iframe-active');
+          this.modalContainer.classList.remove('controls-hidden');
+        }
         if (this.video) {
           this.video.pause();
           this.video.style.display = 'none';
         }
         if (this.youtubeIframe) {
+          this.youtubeIframe.classList.remove('crop-channel5-nav');
           this.youtubeIframe.style.display = 'block';
           this.youtubeIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-forms allow-fullscreen');
           this.youtubeIframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
@@ -754,6 +1301,16 @@ class PlayerController {
         setTimeout(() => {
           if (this.loader) this.loader.classList.add('hidden');
         }, 800);
+        return;
+      }
+
+      if (data && data.success && (data.type === 'iframe' || data.type === 'embed') && data.streamUrl) {
+        this.setEngineUI('embed', 'Official Player');
+        if (this.video) {
+          this.video.pause();
+          this.video.style.display = 'none';
+        }
+        this.loadEmbedMirror(channelId, data.streamUrl);
         return;
       }
 
@@ -874,7 +1431,7 @@ class PlayerController {
           if (this.video.currentTime < bufStart - 0.5) {
             try {
               this.video.currentTime = bufStart + 0.2;
-            } catch (e) {}
+            } catch (e) { }
           }
         }
         if (this.video && this.video.paused) {
@@ -929,7 +1486,7 @@ class PlayerController {
             if (this.hls) {
               this.hls.cleanUpBuffer(15);
             }
-          } catch (e) {}
+          } catch (e) { }
         }
 
         // 3. Fatal errors handling
@@ -964,7 +1521,7 @@ class PlayerController {
                 this.hls.recoverMediaError();
               } else if (this.mediaErrorRecoveries === 2) {
                 console.warn('[IVTV Player] Media decode error #2, swapping audio codec and recovering...');
-                try { this.hls.swapAudioCodec(); } catch (e) {}
+                try { this.hls.swapAudioCodec(); } catch (e) { }
                 this.hls.recoverMediaError();
               } else {
                 console.warn('[IVTV Player] Persistent media error, auto-falling back to Mirror Player...');
@@ -1034,14 +1591,24 @@ class PlayerController {
     const ch = (window.IVTV_DATA && window.IVTV_DATA.channels.find(c => c.id === channelId)) || this.currentChannel;
     let embedUrl = customUrl || this.fallbackEmbedUrl || (ch && ch.iframeUrl) || `https://freeshot.live/embed/${channelId}.php`;
 
-    // Strictly route external mirrors through the ad-sanitizing reverse proxy
-    if (embedUrl && !embedUrl.includes('youtube') && !embedUrl.startsWith('/api/proxy/embed')) {
+    // Strictly route external mirrors through the ad-sanitizing reverse proxy (bypass for official Channel 5)
+    if (embedUrl && !embedUrl.includes('youtube') && !embedUrl.includes('channel5.com') && !embedUrl.startsWith('/api/proxy/embed')) {
       embedUrl = `/api/proxy/embed?url=${encodeURIComponent(embedUrl)}`;
+    }
+
+    const isChannel5 = channelId === 'channel5' || 
+                       channelId === 'channel5-uk' || 
+                       (embedUrl && embedUrl.includes('channel5.com'));
+
+    if (this.modalContainer) {
+      this.modalContainer.classList.add('has-iframe-active');
+      this.modalContainer.classList.remove('controls-hidden');
     }
 
     if (this.youtubeIframe) {
       this.youtubeIframe.style.display = 'block';
-      this.youtubeIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-forms allow-fullscreen');
+      this.youtubeIframe.classList.toggle('crop-channel5-nav', Boolean(isChannel5));
+      this.youtubeIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-forms allow-fullscreen allow-popups');
       this.youtubeIframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
       this.youtubeIframe.setAttribute('allowfullscreen', 'true');
       this.youtubeIframe.src = embedUrl;
@@ -1094,7 +1661,7 @@ class PlayerController {
     this.savedVolume = vol;
     try {
       localStorage.setItem('ivtv_player_volume', vol.toString());
-    } catch (e) {}
+    } catch (e) { }
 
     this.video.volume = vol;
     if (vol > 0 && this.video.muted) {
@@ -1102,13 +1669,13 @@ class PlayerController {
       this.isUserMuted = false;
       try {
         localStorage.setItem('ivtv_player_muted', 'false');
-      } catch (e) {}
+      } catch (e) { }
     } else if (vol === 0) {
       this.video.muted = true;
       this.isUserMuted = true;
       try {
         localStorage.setItem('ivtv_player_muted', 'true');
-      } catch (e) {}
+      } catch (e) { }
     }
 
     this.isAutoplayMuted = false;
@@ -1172,11 +1739,11 @@ class PlayerController {
     this.isAutoplayMuted = false;
     try {
       localStorage.setItem('ivtv_player_muted', 'false');
-    } catch (e) {}
+    } catch (e) { }
     if (this.video.volume === 0) {
       this.video.volume = this.savedVolume > 0 ? this.savedVolume : 0.85;
     }
-    this.video.play().catch(() => {});
+    this.video.play().catch(() => { });
     this.hideUnmuteBadge();
     this.updateVolumeUI();
     this.showVolumeHUD();
@@ -1190,7 +1757,7 @@ class PlayerController {
     this.isUserMuted = willMute;
     try {
       localStorage.setItem('ivtv_player_muted', willMute ? 'true' : 'false');
-    } catch (e) {}
+    } catch (e) { }
 
     if (!willMute) {
       this.isAutoplayMuted = false;
@@ -1293,11 +1860,15 @@ class PlayerController {
     this.isOpen = false;
     this.stopWatchTicker();
     this.modal.classList.remove('active');
+    document.body.classList.remove('theater-active');
     document.body.style.overflow = '';
+    if (this.isSideGuideOpen) {
+      this.toggleSideGuide(false);
+    }
 
     // Exit fullscreen if active
     const isNativeFs = !!(
-      document.fullscreenElement || 
+      document.fullscreenElement ||
       document.webkitFullscreenElement ||
       document.mozFullScreenElement ||
       document.msFullscreenElement
@@ -1307,8 +1878,8 @@ class PlayerController {
       if (exitFn) {
         try {
           const res = exitFn.call(document);
-          if (res && res.catch) res.catch(() => {});
-        } catch (e) {}
+          if (res && res.catch) res.catch(() => { });
+        } catch (e) { }
       }
     }
     if (this.modalContainer) this.modalContainer.classList.remove('is-fullscreen');
@@ -1334,6 +1905,7 @@ class PlayerController {
     }
     if (this.youtubeIframe) {
       this.youtubeIframe.src = '';
+      this.youtubeIframe.classList.remove('crop-channel5-nav');
     }
     this.hideUnmuteBadge();
     if (this.errorOverlay) {
@@ -1350,7 +1922,7 @@ class PlayerController {
       this.controlsHideTimer = null;
     }
     if (this.modalContainer) {
-      this.modalContainer.classList.remove('controls-hidden');
+      this.modalContainer.classList.remove('controls-hidden', 'has-iframe-active');
     }
     const popmenu = document.getElementById('theater-popmenu-wrapper');
     if (popmenu) popmenu.classList.remove('open');
@@ -1365,13 +1937,13 @@ class PlayerController {
 
   toggleFullscreen() {
     const isNativeFs = !!(
-      document.fullscreenElement || 
-      document.webkitFullscreenElement || 
-      document.mozFullScreenElement || 
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
       document.msFullscreenElement
     );
     const isPseudoFs = !!(
-      this.modalContainer?.classList.contains('is-fullscreen') || 
+      this.modalContainer?.classList.contains('is-fullscreen') ||
       this.modal?.classList.contains('is-fullscreen')
     );
 
@@ -1381,8 +1953,8 @@ class PlayerController {
       if (exitFn) {
         try {
           const res = exitFn.call(document);
-          if (res && res.catch) res.catch(() => {});
-        } catch (e) {}
+          if (res && res.catch) res.catch(() => { });
+        } catch (e) { }
       }
       this.handleFullscreenChange(false);
     } else if (isPseudoFs) {
@@ -1430,9 +2002,9 @@ class PlayerController {
 
   handleFullscreenChange(forcedState) {
     const isNativeFs = !!(
-      document.fullscreenElement || 
-      document.webkitFullscreenElement || 
-      document.mozFullScreenElement || 
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
       document.msFullscreenElement
     );
     const isFs = (forcedState !== undefined) ? forcedState : isNativeFs;
@@ -1460,21 +2032,6 @@ class PlayerController {
           : '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>';
       }
     }
-
-    // 2. Update Header Fullscreen Button (#theater-cinema-mode-btn)
-    const wideBtn = document.getElementById('theater-cinema-mode-btn');
-    const wideIcon = document.getElementById('theater-wide-icon');
-    const wideLabel = document.getElementById('theater-wide-label');
-    if (wideBtn) {
-      wideBtn.classList.toggle('active', isFs);
-      wideBtn.setAttribute('title', isFs ? 'Exit Fullscreen (F or Esc)' : 'Toggle Fullscreen (F)');
-    }
-    if (wideIcon) {
-      wideIcon.innerHTML = isFs
-        ? '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>'
-        : '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>';
-    }
-    if (wideLabel) wideLabel.textContent = isFs ? 'Exit Full' : 'Fullscreen';
 
     // Subtle feedback toast on fullscreen enter
     if (isFs && forcedState === true) {
@@ -1568,24 +2125,42 @@ class PlayerController {
     }, 2800);
   }
 
-  toggleAspectRatio() {
-    if (!this.video) return;
-    const modes = ['fit', 'fill', 'stretch'];
-    const labels = {
-      fit: '16:9',
-      fill: 'Zoom',
-      stretch: 'Stretch'
-    };
-    const currentIdx = modes.indexOf(this.aspectRatioMode);
-    this.aspectRatioMode = modes[(currentIdx + 1) % modes.length];
+  applyAspectRatio(mode = 'stretch', showNotification = false) {
+    const modes = ['stretch', 'fit', 'fill'];
+    if (!modes.includes(mode)) mode = 'stretch';
+    this.aspectRatioMode = mode;
+    try {
+      localStorage.setItem('ivtv_player_aspect', mode);
+    } catch (e) { }
 
-    this.video.classList.remove('aspect-fit', 'aspect-fill', 'aspect-stretch');
-    this.video.classList.add(`aspect-${this.aspectRatioMode}`);
+    const labels = {
+      stretch: 'Stretch',
+      fit: '16:9',
+      fill: 'Zoom'
+    };
+
+    if (this.video) {
+      this.video.classList.remove('aspect-fit', 'aspect-fill', 'aspect-stretch');
+      this.video.classList.add(`aspect-${mode}`);
+    }
+    if (this.youtubeIframe) {
+      this.youtubeIframe.classList.remove('aspect-fit', 'aspect-fill', 'aspect-stretch');
+      this.youtubeIframe.classList.add(`aspect-${mode}`);
+    }
 
     const label = document.getElementById('theater-aspect-label');
-    if (label) label.textContent = labels[this.aspectRatioMode];
+    if (label) label.textContent = labels[mode];
 
-    window.showToast(`Aspect Ratio: ${labels[this.aspectRatioMode]}`, 'info');
+    if (showNotification && window.showToast) {
+      window.showToast(`Aspect Ratio: ${labels[mode]}`, 'info');
+    }
+  }
+
+  toggleAspectRatio() {
+    const modes = ['stretch', 'fit', 'fill'];
+    const currentIdx = modes.indexOf(this.aspectRatioMode);
+    const nextMode = modes[(currentIdx + 1) % modes.length];
+    this.applyAspectRatio(nextMode, true);
   }
 
   async togglePiP() {
@@ -1616,26 +2191,57 @@ class PlayerController {
     // Filter by selected category & search query
     let list = [...window.IVTV_DATA.channels];
 
+    const isSports = (c) => {
+      const category = (c.category || '').toLowerCase();
+      const name = (c.name || '').toLowerCase();
+      const id = (c.id || '').toLowerCase();
+      return category === 'sports' || name.includes('sport') || id.includes('sport') || id.includes('f1') || id.includes('tnt');
+    };
+
     if (this.surfCategory === 'Favorites') {
       const favIds = window.ivtvStorage ? window.ivtvStorage.getFavorites() : [];
       list = list.filter(c => favIds.includes(c.id));
+    } else if (this.surfCategory === 'most-viewed') {
+      const nonSports = list.filter(c => !isSports(c)).sort((a, b) => (b.viewsNum || 0) - (a.viewsNum || 0));
+      const sports = list.filter(c => isSports(c)).sort((a, b) => (b.viewsNum || 0) - (a.viewsNum || 0));
+      list = [...nonSports, ...sports].slice(0, 20);
+    } else if (this.surfCategory === 'freeview') {
+      const fvIds = [
+        'bbc-one-uk', 'itv1-uk', 'channel4', 'channel5',
+        'bbc-two-uk', 'bbc-three-uk', 'bbc-news-uk',
+        'itv2-uk', 'itv3-uk', 'itv4-uk', 'film4-uk',
+        'sky-news', 'gb-news'
+      ];
+      list = list.filter(c => fvIds.includes(c.id));
     } else if (this.surfCategory && this.surfCategory !== 'all') {
       list = list.filter(c => c.category === this.surfCategory);
     }
 
     if (this.surfQuery) {
-      list = list.filter(c => 
+      list = list.filter(c =>
         c.name.toLowerCase().includes(this.surfQuery) ||
         (c.chNumber && c.chNumber.toString().includes(this.surfQuery)) ||
         c.category.toLowerCase().includes(this.surfQuery)
       );
     }
 
-    // Sort: current channel's category first, then views
+    // Sort: Sports channels placed at the back unless user actively selected the "Sports" filter
+    const isSportsCategorySelected = this.surfCategory === 'Sports';
     const cat = currentCategory || this.currentChannel?.category;
+
     const sorted = list.sort((a, b) => {
-      if (a.category === cat && b.category !== cat) return -1;
-      if (b.category === cat && a.category !== cat) return 1;
+      if (!isSportsCategorySelected) {
+        const aIsSport = isSports(a);
+        const bIsSport = isSports(b);
+        if (!aIsSport && bIsSport) return -1;
+        if (aIsSport && !bIsSport) return 1;
+      }
+
+      if (cat) {
+        if (a.category === cat && b.category !== cat) return -1;
+        if (b.category === cat && a.category !== cat) return 1;
+      }
+
       return (b.viewsNum || 0) - (a.viewsNum || 0);
     });
 
@@ -1651,19 +2257,56 @@ class PlayerController {
     surfTrack.innerHTML = sorted.map(ch => {
       const logoSrc = ch.logo || ch.logoUrl || '';
       const fallbackLogo = ch.logoUrl || '';
-      const logoHtml = logoSrc 
+      const logoHtml = logoSrc
         ? `<img src="${logoSrc}" class="surf-channel-logo" alt="${ch.name}" loading="lazy" onerror="if(this.dataset.fb!=='1'&&'${fallbackLogo}'){this.dataset.fb='1';this.src='${fallbackLogo}';}else{this.style.display='none';}">`
         : '';
 
+      // Get real-time What's On programme data
+      let progTitle = `${ch.category} Live Broadcast`;
+      let progTime = 'Broadcasting Live';
+      let progressPercent = 50;
+      let minsLeft = '';
+      if (window.ivtvEPG) {
+        const prog = window.ivtvEPG.getCurrentProgram(ch.id);
+        if (prog) {
+          progTitle = prog.title || progTitle;
+          if (prog.startTimeFormatted && prog.endTimeFormatted) {
+            progTime = `${prog.startTimeFormatted} - ${prog.endTimeFormatted}`;
+          }
+          if (prog.minutesLeft) {
+            minsLeft = `${prog.minutesLeft}m left`;
+          }
+          progressPercent = typeof prog.progressPercent === 'number' ? prog.progressPercent : 50;
+        }
+      }
+
+      const isActive = ch.id === currentChannelId;
+
       return `
-        <button type="button" class="surf-channel-item ${ch.id === currentChannelId ? 'active' : ''}" data-channel-id="${ch.id}" title="Watch ${ch.name}">
-          ${logoHtml}
-          <div class="surf-channel-info">
-            <span class="surf-channel-name">
-              ${ch.name}
-              ${ch.chNumber ? `<span style="font-size: 0.68rem; color: var(--accent-emerald); font-weight: 800; margin-left: 0.25rem; background: rgba(0,240,118,0.12); padding: 0.05rem 0.25rem; border-radius: 3px;">${ch.chNumber}</span>` : ''}
-            </span>
-            <span class="surf-channel-category">${ch.category} • ${ch.views}</span>
+        <button type="button" class="surf-channel-item ${isActive ? 'active' : ''}" data-channel-id="${ch.id}" title="${ch.name} — ${progTitle}">
+          <div class="surf-card-header">
+            <div class="surf-card-identity">
+              ${logoHtml}
+              <span class="surf-channel-name">
+                ${ch.name}
+                ${ch.chNumber ? `<span class="surf-ch-badge">${ch.chNumber}</span>` : ''}
+              </span>
+            </div>
+            ${isActive ? '<span class="surf-watching-tag">PLAYING</span>' : '<span class="surf-live-tag">LIVE</span>'}
+          </div>
+
+          <div class="surf-card-whats-on">
+            <div class="surf-prog-row">
+              <span class="surf-now-tag">NOW</span>
+              <span class="surf-prog-title" title="${progTitle}">${progTitle}</span>
+            </div>
+            <div class="surf-prog-footer">
+              <span class="surf-prog-time">${progTime}</span>
+              ${minsLeft ? `<span class="surf-prog-mins">${minsLeft}</span>` : ''}
+            </div>
+            <div class="surf-prog-progress">
+              <div class="surf-prog-progress-fill" style="width: ${progressPercent}%;"></div>
+            </div>
           </div>
         </button>
       `;

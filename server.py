@@ -379,9 +379,9 @@ def get_clean_stream(channel_id, force_refresh=False):
     if channel_id in ["channel5", "channel5-uk"]:
         return {
             "success": True,
-            "type": "hls",
-            "streamUrl": "/api/proxy/hls?url=" + urllib.parse.quote("https://b6cca454.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/U2Ftc3VuZy1nYl9UcnVlQ3JpbWVVS2Zyb21DQlNSZWFsaXR5X0hMUw/playlist.m3u8", safe=""),
-            "fallbackEmbedUrl": "https://www.channel5.com/live-tv",
+            "type": "iframe",
+            "streamUrl": "https://www.channel5.com/channels/5#state=5",
+            "fallbackEmbedUrl": "https://www.channel5.com/channels/5#state=5",
             "channelId": channel_id
         }
 

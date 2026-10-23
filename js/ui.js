@@ -9,6 +9,8 @@ class UIController {
     this.activeEPGCategory = 'all';
     this.searchQuery = '';
     this.heroTimer = null;
+    this.videoEndedHandler = null;
+    this.videoFallbackTimer = null;
     this.epgClockTimer = null;
     this.epgScrolled = false;
 
@@ -17,10 +19,12 @@ class UIController {
     this.allChannelsSort = 'lcn'; // 'lcn' | 'views' | 'name' | 'rating'
     this.allChannelsView = 'grid'; // 'grid' | 'carousel'
     this.allChannelsQuery = '';
+    this.justDraggedLiveChannels = false;
   }
 
   init() {
     this.renderHero();
+    this.renderSpotlightTrio();
     this.renderTopRanked();
     this.renderFreeviewSection();
     this.renderProvidersBar();
@@ -56,14 +60,41 @@ class UIController {
     const current = showcases[this.currentHeroIndex];
     if (!current) return;
 
-    // Update Backdrop Image
+    // Update Backdrop Media (Video & Image)
     const backdropImg = document.getElementById('hero-backdrop-img');
-    if (backdropImg) {
-      backdropImg.style.opacity = '0';
-      setTimeout(() => {
-        backdropImg.src = current.image;
-        backdropImg.style.opacity = '1';
-      }, 200);
+    const backdropVideo = document.getElementById('hero-backdrop-video');
+
+    if (current.video && backdropVideo) {
+      // Ensure completely silent
+      backdropVideo.muted = true;
+      backdropVideo.volume = 0;
+
+      // Load source if changed
+      if (!backdropVideo.currentSrc || !backdropVideo.currentSrc.includes('ivtv-intro')) {
+        backdropVideo.src = current.video;
+        backdropVideo.load();
+      }
+      backdropVideo.currentTime = 0;
+      backdropVideo.style.opacity = '1';
+      const playPromise = backdropVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {});
+      }
+      if (backdropImg) {
+        backdropImg.style.opacity = '0';
+      }
+    } else {
+      if (backdropVideo) {
+        backdropVideo.style.opacity = '0';
+        backdropVideo.pause();
+      }
+      if (backdropImg) {
+        backdropImg.style.opacity = '0';
+        setTimeout(() => {
+          backdropImg.src = current.image;
+          backdropImg.style.opacity = '1';
+        }, 200);
+      }
     }
 
     // Update Hero Content
@@ -125,18 +156,23 @@ class UIController {
         }
       });
     }
+
+
   }
 
   getPrimaryLiveChannel() {
     try {
       const last = localStorage.getItem('ivtv_last_channel_v1');
-      if (last && window.IVTV_DATA?.channels?.some(c => c.id === last)) {
-        return last;
+      if (last) {
+        const found = window.IVTV_DATA?.channels?.find(c => c.id === last);
+        if (found && !this.isSportsChannel(found)) {
+          return last;
+        }
       }
       if (window.ivtvStorage) {
         const recent = window.ivtvStorage.getRecent();
         if (recent && recent.length > 0) {
-          const found = window.IVTV_DATA?.channels?.find(c => c.id === recent[0]);
+          const found = window.IVTV_DATA?.channels?.find(c => c.id === recent[0] && !this.isSportsChannel(c));
           if (found) return found.id;
         }
       }
@@ -166,7 +202,7 @@ class UIController {
           <img class="hero-thumb-img" src="${s.image}" alt="${s.title}">
           <div class="hero-thumb-overlay">
             <div class="hero-thumb-badge-row">
-              <span class="hero-thumb-cat">${s.category.toUpperCase()}</span>
+              <span class="hero-thumb-cat">${s.video ? '▶ ' + s.category.toUpperCase() : s.category.toUpperCase()}</span>
               <span class="hero-thumb-live-dot"></span>
             </div>
             <span class="hero-thumb-title">${s.title}</span>
@@ -214,12 +250,14 @@ class UIController {
     const total = window.IVTV_DATA.heroShowcases.length;
     this.currentHeroIndex = (this.currentHeroIndex + 1) % total;
     this.renderHero();
+    this.resetHeroTimer();
   }
 
   prevHeroSlide() {
     const total = window.IVTV_DATA.heroShowcases.length;
     this.currentHeroIndex = (this.currentHeroIndex - 1 + total) % total;
     this.renderHero();
+    this.resetHeroTimer();
   }
 
   setupHeroAutoSlide() {
@@ -227,7 +265,42 @@ class UIController {
   }
 
   resetHeroTimer() {
-    if (this.heroTimer) clearInterval(this.heroTimer);
+    if (this.heroTimer) {
+      clearInterval(this.heroTimer);
+      this.heroTimer = null;
+    }
+
+    const backdropVideo = document.getElementById('hero-backdrop-video');
+    if (this.videoEndedHandler && backdropVideo) {
+      backdropVideo.removeEventListener('ended', this.videoEndedHandler);
+      this.videoEndedHandler = null;
+    }
+    if (this.videoFallbackTimer) {
+      clearTimeout(this.videoFallbackTimer);
+      this.videoFallbackTimer = null;
+    }
+
+    const showcases = window.IVTV_DATA?.heroShowcases;
+    const current = showcases ? showcases[this.currentHeroIndex] : null;
+
+    if (current && current.video && backdropVideo) {
+      // Intro video plays completely to the end before switching to the next slide
+      this.videoEndedHandler = () => {
+        this.nextHeroSlide();
+      };
+      backdropVideo.addEventListener('ended', this.videoEndedHandler, { once: true });
+
+      // Fallback timer in case autoplay/ended event is delayed or interrupted
+      const fallbackMs = (backdropVideo.duration && !isNaN(backdropVideo.duration) && backdropVideo.duration > 0)
+        ? Math.ceil((backdropVideo.duration + 1) * 1000)
+        : 11000;
+      this.videoFallbackTimer = setTimeout(() => {
+        this.nextHeroSlide();
+      }, fallbackMs);
+      return;
+    }
+
+    // Standard auto-slide interval for image slides
     this.heroTimer = setInterval(() => {
       this.nextHeroSlide();
     }, 7500);
@@ -249,9 +322,45 @@ class UIController {
     if (name.includes('News')) return '📡';
     if (name.includes('Arts')) return '🎨';
     if (name.includes('History')) return '🏛️';
-    if (ch.category === 'Sports') return '🏆';
     if (ch.category === 'Cinema') return '🍿';
     return '📺';
+  }
+
+  isSportsChannel(c) {
+    if (!c) return false;
+    const cat = (c.category || '').toLowerCase();
+    const name = (c.name || '').toLowerCase();
+    const genre = (c.genre || '').toLowerCase();
+    const id = (c.id || '').toLowerCase();
+    return cat === 'sports' || 
+           name.includes('sport') || 
+           name.includes('premier league') || 
+           name.includes('laliga') || 
+           name.includes('tnt') || 
+           name.includes('racing') || 
+           name.includes('rally') || 
+           name.includes('cricket') || 
+           name.includes('golf') || 
+           name.includes('tennis') || 
+           id.includes('sport') ||
+           id.includes('f1') ||
+           id.includes('tnt') ||
+           id.includes('racing') ||
+           id.includes('rally') ||
+           id.includes('cricket') ||
+           id.includes('golf') ||
+           id.includes('tennis') ||
+           genre.includes('motorsport') ||
+           genre.includes('football') ||
+           genre.includes('racing') ||
+           genre.includes('cricket') ||
+           genre.includes('golf') ||
+           genre.includes('tennis') ||
+           genre.includes('sports');
+  }
+
+  getHomeChannels() {
+    return (window.IVTV_DATA?.channels || []).filter(c => !this.isSportsChannel(c));
   }
 
   // ==========================================================================
@@ -391,6 +500,80 @@ class UIController {
   }
 
   // ==========================================================================
+  // FEATURED SPOTLIGHT TRIO (PRIME LIVE BROADCASTS)
+  // ==========================================================================
+
+  renderSpotlightTrio() {
+    const grid = document.getElementById('spotlight-trio-grid');
+    if (!grid) return;
+
+    // Pick 3 premier distinct live channels: News, Cinema, Entertainment (Strictly NO sports channels)
+    const primeIds = ['sky-news', 'sky-cinema-premiere-uk', 'sky-atlantic-uk'];
+    const primeChannels = primeIds
+      .map(id => window.IVTV_DATA?.channels?.find(c => c.id === id && !this.isSportsChannel(c)))
+      .filter(Boolean);
+
+    // Fallback if any ID missing — strictly non-sports channels
+    if (primeChannels.length < 3) {
+      const nonSportsFallback = this.getHomeChannels().filter(c => !primeChannels.some(p => p.id === c.id));
+      primeChannels.push(...nonSportsFallback.slice(0, 3 - primeChannels.length));
+    }
+
+    grid.innerHTML = primeChannels.map(ch => {
+      const prog = window.ivtvEPG ? window.ivtvEPG.getCurrentProgram(ch.id) : null;
+      const progTitle = prog ? prog.title : 'Live Television Broadcast';
+      const progTime = prog ? `${prog.startTimeFormatted} - ${prog.endTimeFormatted}` : '24/7 Live Broadcast';
+      const progLeft = prog ? `${prog.minutesLeft}m remaining` : 'Broadcasting Live';
+      const progPercent = prog ? (prog.progressPercent || 40) : 40;
+      const chNum = ch.chNumber ? `CH ${ch.chNumber}` : '';
+      const backdropSrc = this.getChannelBackdrop(ch);
+
+      return `
+        <div class="spotlight-card" data-channel-id="${ch.id}" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
+          <div class="spotlight-media">
+            <img class="spotlight-backdrop" src="${backdropSrc}" alt="${ch.name} Showcase" loading="lazy">
+            <div class="spotlight-overlay">
+              <div class="spotlight-play-btn">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+              </div>
+            </div>
+            <div class="spotlight-badge-row">
+              <span class="spotlight-tag-badge">
+                <span class="live-pulse-dot" style="width:6px;height:6px;"></span>
+                <span>${ch.category}</span>
+              </span>
+              <span class="spotlight-viewers-badge">🔥 ${ch.views} viewers</span>
+            </div>
+          </div>
+          <div class="spotlight-body">
+            <div class="spotlight-channel-line">
+              <span class="spotlight-channel-name">${ch.name}</span>
+              ${chNum ? `<span class="spotlight-ch-num">${chNum}</span>` : ''}
+            </div>
+            <div class="spotlight-now-box">
+              <div class="spotlight-program-title" title="${progTitle}">${progTitle}</div>
+              <div class="spotlight-program-meta">
+                <span>${progTime}</span>
+                <span style="color:var(--accent-neon);">${progLeft}</span>
+              </div>
+              <div class="spotlight-progress-wrap">
+                <div class="spotlight-progress-fill" style="width: ${progPercent}%;"></div>
+              </div>
+            </div>
+            <div class="spotlight-footer">
+              <span class="spotlight-genre-tag">${ch.genre || ch.category} • HD Broadcast</span>
+              <span class="spotlight-watch-action">
+                <span>Watch Live</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ==========================================================================
   // TOP RANKED CHANNELS WITH GIANT OUTLINED NUMERALS (1, 2, 3...)
   // ==========================================================================
 
@@ -398,8 +581,8 @@ class UIController {
     const track = document.getElementById('ranked-channels-track');
     if (!track) return;
 
-    // Sort channels strictly by real-time view count descending (most viewed)
-    const sorted = [...window.IVTV_DATA.channels]
+    // Strictly non-sports channels sorted by views descending
+    const sorted = this.getHomeChannels()
       .sort((a, b) => (b.viewsNum || 0) - (a.viewsNum || 0))
       .slice(0, 10);
 
@@ -497,8 +680,54 @@ class UIController {
   }
 
   // ==========================================================================
-  // ALL UK CHANNELS COMPLETE DIRECTORY CONTROLLER
   // ==========================================================================
+  // WATCH LIVE CHANNELS COMPLETE DIRECTORY CONTROLLER
+  // ==========================================================================
+
+  getDefaultLiveChannelsOrder() {
+    return this.getHomeChannels().map(c => c.id);
+  }
+
+  getLiveChannelsOrder() {
+    const defaultOrder = this.getDefaultLiveChannelsOrder();
+    try {
+      const saved = localStorage.getItem('ivtv_live_channels_order');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const list = parsed.filter(id => {
+            const ch = window.IVTV_DATA?.channels?.find(c => c.id === id);
+            return ch && !this.isSportsChannel(ch);
+          });
+          defaultOrder.forEach(id => {
+            if (!list.includes(id)) list.push(id);
+          });
+          return list;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved live channels order:', e);
+    }
+    return defaultOrder;
+  }
+
+  saveLiveChannelsOrder(orderArray) {
+    try {
+      localStorage.setItem('ivtv_live_channels_order', JSON.stringify(orderArray));
+    } catch (e) {
+      console.warn('Failed to save live channels order:', e);
+    }
+  }
+
+  resetLiveChannelsOrder() {
+    try {
+      localStorage.removeItem('ivtv_live_channels_order');
+    } catch (e) {}
+    this.renderAllUKChannels();
+    if (window.showToast) {
+      window.showToast('Watch Live Channels order reset to default', 'info');
+    }
+  }
 
   renderAllUKChannels() {
     const grid = document.getElementById('all-channels-grid');
@@ -510,11 +739,34 @@ class UIController {
 
     if (!grid) return;
 
-    let channels = [...window.IVTV_DATA.channels];
+    let channels = this.getHomeChannels();
 
     // Filter by Category
-    if (this.allChannelsCategory && this.allChannelsCategory !== 'all') {
-      channels = channels.filter(ch => ch.category === this.allChannelsCategory);
+    if (this.allChannelsCategory === 'most-viewed') {
+      channels.sort((a, b) => (b.viewsNum || 0) - (a.viewsNum || 0));
+      channels = channels.slice(0, 10);
+    } else if (this.allChannelsCategory === 'freeview') {
+      const fvOrder = this.getFreeviewOrder();
+      channels = fvOrder
+        .map(id => window.IVTV_DATA?.channels?.find(c => c.id === id && !this.isSportsChannel(c)))
+        .filter(Boolean);
+    } else if (this.allChannelsCategory && this.allChannelsCategory !== 'all') {
+      channels = channels.filter(ch => ch.category === this.allChannelsCategory && !this.isSportsChannel(ch));
+    } else {
+      // 'all' category: respect user's custom dragged order if saved
+      const savedOrder = this.getLiveChannelsOrder();
+      const map = new Map(channels.map(c => [c.id, c]));
+      const ordered = [];
+      savedOrder.forEach(id => {
+        if (map.has(id)) {
+          ordered.push(map.get(id));
+          map.delete(id);
+        }
+      });
+      for (const ch of map.values()) {
+        ordered.push(ch);
+      }
+      channels = ordered;
     }
 
     // Filter by In-Section Search Query
@@ -529,19 +781,21 @@ class UIController {
       });
     }
 
-    // Sort Channels
-    if (this.allChannelsSort === 'lcn') {
-      channels.sort((a, b) => (a.chNumber || 999) - (b.chNumber || 999));
+    // Sort Channels (apply when sort dropdown changed)
+    if (this.allChannelsCategory === 'most-viewed') {
+      channels.sort((a, b) => (b.viewsNum || 0) - (a.viewsNum || 0));
     } else if (this.allChannelsSort === 'views') {
       channels.sort((a, b) => (b.viewsNum || 0) - (a.viewsNum || 0));
     } else if (this.allChannelsSort === 'name') {
       channels.sort((a, b) => a.name.localeCompare(b.name));
     } else if (this.allChannelsSort === 'rating') {
       channels.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (this.allChannelsSort === 'lcn' && this.allChannelsCategory !== 'all') {
+      channels.sort((a, b) => (a.chNumber || 999) - (b.chNumber || 999));
     }
 
     // Update Counts & Badges
-    const totalCount = window.IVTV_DATA.channels.length;
+    const totalCount = this.getHomeChannels().length;
     if (counterBadge) {
       counterBadge.textContent = `${totalCount} Live Channels`;
     }
@@ -550,19 +804,22 @@ class UIController {
     }
 
     // Update Pill Count Badges
-    const sportsCount = window.IVTV_DATA.channels.filter(c => c.category === 'Sports').length;
-    const cinemaCount = window.IVTV_DATA.channels.filter(c => c.category === 'Cinema').length;
-    const entCount = window.IVTV_DATA.channels.filter(c => c.category === 'Entertainment').length;
-    const newsCount = window.IVTV_DATA.channels.filter(c => c.category === 'News').length;
+    const mostViewedCount = 10;
+    const freeviewCount = this.getDefaultFreeviewOrder().length;
+    const cinemaCount = this.getHomeChannels().filter(c => c.category === 'Cinema').length;
+    const entCount = this.getHomeChannels().filter(c => c.category === 'Entertainment').length;
+    const newsCount = this.getHomeChannels().filter(c => c.category === 'News').length;
 
     const countAll = document.getElementById('count-pill-all');
-    const countSports = document.getElementById('count-pill-sports');
+    const countMostViewed = document.getElementById('count-pill-most-viewed');
+    const countFreeview = document.getElementById('count-pill-freeview');
     const countCinema = document.getElementById('count-pill-cinema');
     const countEnt = document.getElementById('count-pill-entertainment');
     const countNews = document.getElementById('count-pill-news');
 
     if (countAll) countAll.textContent = totalCount;
-    if (countSports) countSports.textContent = sportsCount;
+    if (countMostViewed) countMostViewed.textContent = mostViewedCount;
+    if (countFreeview) countFreeview.textContent = freeviewCount;
     if (countCinema) countCinema.textContent = cinemaCount;
     if (countEnt) countEnt.textContent = entCount;
     if (countNews) countNews.textContent = newsCount;
@@ -577,14 +834,19 @@ class UIController {
 
     if (emptyState) emptyState.style.display = 'none';
 
-    // Render Cards HTML
-    const isSortingByViews = this.allChannelsSort === 'views';
+    // Render Cards HTML (Draggable cards with drag indicator)
+    const isSortingByViews = this.allChannelsSort === 'views' || this.allChannelsCategory === 'most-viewed';
     const cardsHtml = channels.map((ch, idx) => {
       const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
       const rank = isSortingByViews ? (idx + 1) : null;
       return `
-        <div class="channel-card" data-channel-id="${ch.id}" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
-          ${this.buildChannelCardInner(ch, isFav, rank)}
+        <div class="channel-card live-channels-draggable-card" 
+             draggable="true" 
+             data-channel-id="${ch.id}" 
+             data-index="${idx}"
+             title="Drag to rearrange position • Click to watch"
+             onclick="if(!window.UIControllerInstance?.justDraggedLiveChannels) window.ivtvPlayer?.openPlayer('${ch.id}')">
+          ${this.buildChannelCardInner(ch, isFav, rank, true)}
         </div>
       `;
     }).join('');
@@ -594,20 +856,180 @@ class UIController {
       if (grid) grid.style.display = 'none';
       if (carouselWrapper) {
         carouselWrapper.style.display = 'block';
-        if (track) track.innerHTML = cardsHtml;
+        if (track) {
+          track.classList.add('live-channels-drag-track');
+          track.innerHTML = cardsHtml;
+          this.setupLiveChannelsDragAndDrop(track);
+        }
       }
     } else {
       if (carouselWrapper) carouselWrapper.style.display = 'none';
       if (grid) {
         grid.style.display = 'grid';
+        grid.classList.add('live-channels-drag-track');
         grid.innerHTML = cardsHtml;
+        this.setupLiveChannelsDragAndDrop(grid);
       }
     }
 
     this.initCarouselMouseNavigation();
   }
 
+  setupLiveChannelsDragAndDrop(container) {
+    if (!container) return;
+
+    let draggedCard = null;
+    let isDragging = false;
+    let dragJustEnded = false;
+
+    const cards = container.querySelectorAll('.live-channels-draggable-card');
+
+    cards.forEach(card => {
+      // Desktop HTML5 Drag Start
+      card.addEventListener('dragstart', (e) => {
+        draggedCard = card;
+        isDragging = true;
+        dragJustEnded = false;
+        this.justDraggedLiveChannels = true;
+        card.classList.add('is-dragging-card');
+        container.classList.add('track-is-reordering');
+
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try {
+            e.dataTransfer.setData('text/plain', card.dataset.channelId || '');
+          } catch (err) {}
+        }
+
+        setTimeout(() => {
+          if (card.classList.contains('is-dragging-card')) {
+            card.classList.add('drag-ghost');
+          }
+        }, 10);
+      });
+
+      // Drag End
+      card.addEventListener('dragend', () => {
+        if (draggedCard) {
+          draggedCard.classList.remove('is-dragging-card', 'drag-ghost');
+        }
+        container.classList.remove('track-is-reordering');
+
+        // Persist current DOM order
+        const newOrder = [...container.querySelectorAll('.live-channels-draggable-card')].map(c => c.dataset.channelId).filter(Boolean);
+        this.saveLiveChannelsOrder(newOrder);
+
+        isDragging = false;
+        dragJustEnded = true;
+        draggedCard = null;
+
+        setTimeout(() => {
+          dragJustEnded = false;
+          this.justDraggedLiveChannels = false;
+        }, 250);
+      });
+
+      // Drag Over on card
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'move';
+        }
+
+        if (!draggedCard || draggedCard === card) return;
+
+        const rect = card.getBoundingClientRect();
+        const midPoint = rect.left + rect.width / 2;
+
+        if (e.clientX < midPoint) {
+          if (card.previousElementSibling !== draggedCard) {
+            container.insertBefore(draggedCard, card);
+          }
+        } else {
+          if (card.nextElementSibling !== draggedCard) {
+            container.insertBefore(draggedCard, card.nextElementSibling);
+          }
+        }
+      });
+
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (window.showToast) {
+          window.showToast('Watch Live channel order updated', 'info');
+        }
+      });
+
+      // Mobile Touch Drag Support
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchMoved = false;
+
+      card.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1 || e.target.closest('.card-fav-btn')) return;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchMoved = false;
+      }, { passive: true });
+
+      card.addEventListener('touchmove', (e) => {
+        if (!e.touches || e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+          touchMoved = true;
+          this.justDraggedLiveChannels = true;
+          card.classList.add('is-dragging-card');
+
+          const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+          const targetCard = elemBelow ? elemBelow.closest('.live-channels-draggable-card') : null;
+          if (targetCard && targetCard !== card && targetCard.parentElement === container) {
+            const rect = targetCard.getBoundingClientRect();
+            const midPoint = rect.left + rect.width / 2;
+            if (touch.clientX < midPoint) {
+              if (targetCard.previousElementSibling !== card) {
+                container.insertBefore(card, targetCard);
+              }
+            } else {
+              if (targetCard.nextElementSibling !== card) {
+                container.insertBefore(card, targetCard.nextElementSibling);
+              }
+            }
+          }
+        }
+      }, { passive: true });
+
+      card.addEventListener('touchend', () => {
+        if (touchMoved) {
+          card.classList.remove('is-dragging-card');
+          const newOrder = [...container.querySelectorAll('.live-channels-draggable-card')].map(c => c.dataset.channelId).filter(Boolean);
+          this.saveLiveChannelsOrder(newOrder);
+          setTimeout(() => {
+            this.justDraggedLiveChannels = false;
+          }, 250);
+        }
+        touchMoved = false;
+      });
+    });
+
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+    });
+  }
+
   setupAllChannelsEventListeners() {
+    // Reset Order Button
+    const resetOrderBtn = document.getElementById('live-channels-reset-order-btn');
+    if (resetOrderBtn) {
+      resetOrderBtn.addEventListener('click', () => {
+        this.resetLiveChannelsOrder();
+      });
+    }
+
     // View Toggle Buttons (Grid vs Carousel)
     const btnGrid = document.getElementById('view-toggle-grid');
     const btnCarousel = document.getElementById('view-toggle-carousel');
@@ -696,7 +1118,6 @@ class UIController {
   renderCategorySections() {
     this.renderFreeviewSection();
     this.renderSkyChannels(this.skySubfilter || 'all');
-    this.renderSportsSection(this.sportsSubfilter || 'all');
     this.renderNewsSection();
     this.renderRow('cinema-track', ch => ch.category === 'Cinema');
     this.renderRow('entertainment-track', ch => ch.category === 'Entertainment');
@@ -772,7 +1193,7 @@ class UIController {
 
     const order = this.getFreeviewOrder();
     const channels = order
-      .map(id => window.IVTV_DATA?.channels?.find(c => c.id === id))
+      .map(id => window.IVTV_DATA?.channels?.find(c => c.id === id && !this.isSportsChannel(c)))
       .filter(Boolean);
 
     const counter = document.getElementById('freeview-channels-counter');
@@ -953,15 +1374,13 @@ class UIController {
     const track = document.getElementById('sky-channels-track');
     if (!track) return;
 
-    let skyChannels = window.IVTV_DATA.channels.filter(c => {
+    let skyChannels = this.getHomeChannels().filter(c => {
       const name = c.name.toLowerCase();
       const id = c.id.toLowerCase();
       return name.includes('sky') || id.includes('sky');
     });
 
-    if (subfilter === 'Sports') {
-      skyChannels = skyChannels.filter(c => c.category === 'Sports' || c.name.toLowerCase().includes('sport'));
-    } else if (subfilter === 'Cinema') {
+    if (subfilter === 'Cinema') {
       skyChannels = skyChannels.filter(c => c.category === 'Cinema' || c.name.toLowerCase().includes('cinema'));
     } else if (subfilter === 'Entertainment') {
       skyChannels = skyChannels.filter(c => c.category === 'Entertainment' || c.name.includes('Atlantic') || c.name.includes('Showcase') || c.name.includes('Max') || c.name.includes('Comedy') || c.name.includes('Arts'));
@@ -1018,7 +1437,7 @@ class UIController {
     const track = document.getElementById('news-track');
     if (!track) return;
 
-    const news = window.IVTV_DATA.channels.filter(c => c.category === 'News' || c.name.toLowerCase().includes('news') || c.name.toLowerCase().includes('bloomberg') || c.name.toLowerCase().includes('cnbc') || c.name.toLowerCase().includes('cnn'));
+    const news = this.getHomeChannels().filter(c => c.category === 'News' || c.name.toLowerCase().includes('news') || c.name.toLowerCase().includes('bloomberg') || c.name.toLowerCase().includes('cnbc') || c.name.toLowerCase().includes('cnn'));
 
     const counter = document.getElementById('news-channels-counter');
     if (counter) counter.textContent = `${news.length} Channels`;
@@ -1039,7 +1458,7 @@ class UIController {
     const track = document.getElementById(containerId);
     if (!track) return;
 
-    const channels = window.IVTV_DATA.channels.filter(filterFn);
+    const channels = this.getHomeChannels().filter(filterFn);
 
     track.innerHTML = channels.map(ch => {
       const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(ch.id);
@@ -1060,7 +1479,7 @@ class UIController {
     if (!container || !track) return;
 
     const favIds = window.ivtvStorage ? window.ivtvStorage.getFavorites() : [];
-    const favChannels = window.IVTV_DATA.channels.filter(c => favIds.includes(c.id));
+    const favChannels = this.getHomeChannels().filter(c => favIds.includes(c.id));
 
     container.style.display = 'block';
 
@@ -1142,7 +1561,7 @@ class UIController {
     if (mainSections) mainSections.style.display = 'none';
     if (searchSection) searchSection.classList.add('active');
 
-    const matches = window.IVTV_DATA.channels.filter(ch => {
+    const matches = this.getHomeChannels().filter(ch => {
       const q = this.searchQuery;
       return ch.name.toLowerCase().includes(q) ||
              (ch.chNumber && ch.chNumber.toString().includes(q)) ||
@@ -1162,7 +1581,7 @@ class UIController {
           <div class="empty-state" style="grid-column: 1 / -1;">
             <div class="empty-state-icon">🔍</div>
             <div class="empty-state-title">No channels found</div>
-            <div class="empty-state-desc">Try searching for "BBC", "ITV", "Premier League", "F1", or channel numbers like "101"</div>
+            <div class="empty-state-desc">Try searching for "BBC", "ITV", "Sky Cinema", "Sky Atlantic", or channel numbers like "101"</div>
           </div>
         `;
       } else {
@@ -1181,14 +1600,12 @@ class UIController {
   applyFilter() {
     const filter = this.activeFilter;
     const allSection = document.getElementById('all-uk-channels-section');
-    const sportsSection = document.getElementById('sports-section');
     const cinemaSection = document.getElementById('cinema-section');
     const entertainmentSection = document.getElementById('entertainment-section');
     const newsSection = document.getElementById('news-section');
 
     const showAll = () => {
       if (allSection) allSection.style.display = 'block';
-      if (sportsSection) sportsSection.style.display = 'block';
       if (cinemaSection) cinemaSection.style.display = 'block';
       if (entertainmentSection) entertainmentSection.style.display = 'block';
       if (newsSection) newsSection.style.display = 'block';
@@ -1196,23 +1613,14 @@ class UIController {
 
     if (filter === 'all') {
       showAll();
-    } else if (filter === 'sky-sports' || filter === 'Sports') {
-      if (allSection) allSection.style.display = 'block';
-      if (sportsSection) sportsSection.style.display = 'block';
-      if (cinemaSection) cinemaSection.style.display = 'none';
-      if (entertainmentSection) entertainmentSection.style.display = 'none';
-      if (newsSection) newsSection.style.display = 'none';
-      sportsSection.scrollIntoView({ behavior: 'smooth' });
     } else if (filter === 'sky-cinema' || filter === 'film4' || filter === 'Cinema') {
       if (allSection) allSection.style.display = 'block';
-      if (sportsSection) sportsSection.style.display = 'none';
       if (cinemaSection) cinemaSection.style.display = 'block';
       if (entertainmentSection) entertainmentSection.style.display = 'none';
       if (newsSection) newsSection.style.display = 'none';
       cinemaSection.scrollIntoView({ behavior: 'smooth' });
     } else if (filter === 'news-network' || filter === 'News' || filter === 'sky-news') {
       if (allSection) allSection.style.display = 'block';
-      if (sportsSection) sportsSection.style.display = 'none';
       if (cinemaSection) cinemaSection.style.display = 'none';
       if (entertainmentSection) entertainmentSection.style.display = 'none';
       if (newsSection) newsSection.style.display = 'block';
@@ -1220,7 +1628,6 @@ class UIController {
     } else {
       // Entertainment (BBC, ITV, Sky Atlantic, Sky Showcase, etc.)
       if (allSection) allSection.style.display = 'block';
-      if (sportsSection) sportsSection.style.display = 'none';
       if (cinemaSection) cinemaSection.style.display = 'none';
       if (entertainmentSection) entertainmentSection.style.display = 'block';
       if (newsSection) newsSection.style.display = 'none';
@@ -1502,19 +1909,127 @@ class UIController {
       brandLink.addEventListener('click', (e) => {
         e.preventDefault();
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        document.querySelectorAll('.nav-pill-btn').forEach(b => b.classList.remove('active'));
-        const homePill = document.querySelector('.nav-pill-btn[data-nav="home"]');
-        if (homePill) homePill.classList.add('active');
+        document.querySelectorAll('.nav-pill-btn, .nav-burger-item').forEach(b => b.classList.remove('active'));
+        const homeBurgerItem = document.querySelector('.nav-burger-item[data-nav="home"]');
+        if (homeBurgerItem) homeBurgerItem.classList.add('active');
+        const burgerBtn = document.getElementById('nav-burger-btn');
+        if (burgerBtn) burgerBtn.classList.add('active');
       });
     }
 
-    // Nav Category Pills
-    document.querySelectorAll('.nav-pill-btn').forEach(btn => {
+    // Navbar Minimize & Expand on Click Controller (Half-width, aligned right)
+    const navbarGlass = document.getElementById('navbar-glass');
+    const navExpandBtn = document.getElementById('nav-expand-btn');
+    const navMinimizeBtn = document.getElementById('nav-minimize-btn');
+    const burgerWrapper = document.getElementById('nav-burger-wrapper');
+    const burgerBtn = document.getElementById('nav-burger-btn');
+
+    if (navbarGlass) {
+      const expandNavbar = () => {
+        navbarGlass.classList.remove('minimized');
+        if (navExpandBtn) navExpandBtn.setAttribute('aria-expanded', 'true');
+      };
+
+      const minimizeNavbar = () => {
+        navbarGlass.classList.add('minimized');
+        if (navExpandBtn) navExpandBtn.setAttribute('aria-expanded', 'false');
+        if (burgerWrapper) {
+          burgerWrapper.classList.remove('open');
+          if (burgerBtn) burgerBtn.setAttribute('aria-expanded', 'false');
+        }
+      };
+
+      if (navExpandBtn) {
+        navExpandBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          expandNavbar();
+        });
+      }
+
+      if (navMinimizeBtn) {
+        navMinimizeBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          minimizeNavbar();
+        });
+      }
+
+      // Clicking outside the navbar minimizes it
+      document.addEventListener('click', (e) => {
+        if (!navbarGlass.classList.contains('minimized') && !navbarGlass.contains(e.target)) {
+          minimizeNavbar();
+        }
+      });
+
+      // Escape key minimizes navbar
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !navbarGlass.classList.contains('minimized')) {
+          minimizeNavbar();
+        }
+        // "/" shortcut opens search and expands navbar if minimized
+        if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && (!window.ivtvPlayer || !window.ivtvPlayer.isOpen)) {
+          e.preventDefault();
+          expandNavbar();
+          const searchInput = document.getElementById('nav-search-input');
+          if (searchInput) {
+            setTimeout(() => searchInput.focus(), 120);
+          }
+        }
+      });
+    }
+
+    // Burger Menu Trigger & Dropdown Handler
+    if (burgerBtn && burgerWrapper) {
+      burgerBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const isOpen = burgerWrapper.classList.toggle('open');
+        burgerBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+
+      // Close burger dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!burgerWrapper.contains(e.target)) {
+          burgerWrapper.classList.remove('open');
+          burgerBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+
+      // Close on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && burgerWrapper.classList.contains('open')) {
+          burgerWrapper.classList.remove('open');
+          burgerBtn.setAttribute('aria-expanded', 'false');
+          burgerBtn.focus();
+        }
+      });
+    }
+
+    // Nav Category Pills & Burger Navigation Items
+    document.querySelectorAll('.nav-pill-btn, .nav-burger-item').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
-        document.querySelectorAll('.nav-pill-btn').forEach(b => b.classList.remove('active'));
+        // Close burger dropdown if clicked inside
+        if (burgerWrapper) {
+          burgerWrapper.classList.remove('open');
+          if (burgerBtn) burgerBtn.setAttribute('aria-expanded', 'false');
+        }
+
+        document.querySelectorAll('.nav-pill-btn, .nav-burger-item').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const filter = btn.dataset.nav;
+
+        if (filter === 'home') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          if (burgerBtn) burgerBtn.classList.add('active');
+          const homeBurger = document.querySelector('.nav-burger-item[data-nav="home"]');
+          if (homeBurger) homeBurger.classList.add('active');
+          return;
+        }
+
+        // If not home, remove active highlight from burger button
+        if (burgerBtn) burgerBtn.classList.remove('active');
 
         if (filter === 'guide') {
           this.openTVGuide();
@@ -1530,8 +2045,9 @@ class UIController {
           return;
         }
 
-        if (filter === 'home') {
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (filter === 'most-viewed') {
+          const topSec = document.getElementById('top-ranked-section');
+          if (topSec) topSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
           return;
         }
 
@@ -1562,8 +2078,7 @@ class UIController {
         const secMap = {
           'Entertainment': 'entertainment-section',
           'Cinema': 'cinema-section',
-          'News': 'news-section',
-          'Sports': 'sports-section'
+          'News': 'news-section'
         };
         const targetId = secMap[filter];
         const sec = targetId ? document.getElementById(targetId) : null;
@@ -1589,19 +2104,25 @@ class UIController {
         scrollSpyTimer = null;
         const scrollY = window.scrollY;
         if (scrollY < 450) {
-          document.querySelectorAll('.nav-pill-btn').forEach(b => b.classList.remove('active'));
-          const homeBtn = document.querySelector('.nav-pill-btn[data-nav="home"]');
-          if (homeBtn) homeBtn.classList.add('active');
+          document.querySelectorAll('.nav-pill-btn, .nav-burger-item').forEach(b => b.classList.remove('active'));
+          const homeBurger = document.querySelector('.nav-burger-item[data-nav="home"]');
+          if (homeBurger) homeBurger.classList.add('active');
+          const burgerBtnEl = document.getElementById('nav-burger-btn');
+          if (burgerBtnEl) burgerBtnEl.classList.add('active');
           return;
         }
+
+        const burgerBtnEl = document.getElementById('nav-burger-btn');
+        if (burgerBtnEl) burgerBtnEl.classList.remove('active');
 
         const sections = [
           { id: 'all-uk-channels-section', nav: 'all' },
           { id: 'cinema-section', nav: 'Cinema' },
           { id: 'news-section', nav: 'News' },
-          { id: 'sports-section', nav: 'Sports' },
+          { id: 'entertainment-section', nav: 'Entertainment' },
           { id: 'sky-channels-section', nav: 'sky' },
           { id: 'freeview-section', nav: 'freeview' },
+          { id: 'top-ranked-section', nav: 'most-viewed' },
           { id: 'favorites-section', nav: 'favorites' }
         ];
 
@@ -1610,7 +2131,7 @@ class UIController {
           if (el) {
             const rect = el.getBoundingClientRect();
             if (rect.top <= 200 && rect.bottom > 120) {
-              document.querySelectorAll('.nav-pill-btn').forEach(b => b.classList.remove('active'));
+              document.querySelectorAll('.nav-pill-btn, .nav-burger-item').forEach(b => b.classList.remove('active'));
               const targetBtn = document.querySelector(`.nav-pill-btn[data-nav="${secInfo.nav}"]`);
               if (targetBtn) targetBtn.classList.add('active');
               break;
@@ -1749,7 +2270,7 @@ class UIController {
 
   initCarouselMouseNavigation() {
     // Select all horizontal tracks across home, hero, categories, and player
-    const tracks = document.querySelectorAll('.carousel-track, .hero-thumbnails-row, .ranked-channels-track, #theater-surf-list');
+    const tracks = document.querySelectorAll('.carousel-track, .hero-thumbnails-row, .ranked-channels-track, #theater-surf-list, #header-nav-pills');
     tracks.forEach(track => this.enableHorizontalScrollAndDrag(track));
   }
 
@@ -1757,25 +2278,41 @@ class UIController {
     if (!track || track._hasScrollDragInit) return;
     track._hasScrollDragInit = true;
 
-    // 1. Mouse Wheel Scroll -> Smooth Horizontal Scroll
+    // 1. Mouse Wheel Scroll -> Responsive, Silk-Smooth Horizontal Scroll
     track.addEventListener('wheel', (e) => {
-      // If predominantly vertical scroll
-      if (Math.abs(e.deltaY) >= Math.abs(e.deltaX) && Math.abs(e.deltaY) > 0) {
-        const canScrollLeft = track.scrollLeft > 0;
-        const canScrollRight = track.scrollLeft < (track.scrollWidth - track.clientWidth - 2);
+      const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      if (!delta) return;
 
-        if ((e.deltaY < 0 && canScrollLeft) || (e.deltaY > 0 && canScrollRight)) {
-          e.preventDefault();
-          track.scrollBy({
-            left: e.deltaY * 1.35,
-            behavior: 'smooth'
-          });
+      const canScrollLeft = track.scrollLeft > 0;
+      const canScrollRight = track.scrollLeft < (track.scrollWidth - track.clientWidth - 2);
+
+      if ((delta < 0 && canScrollLeft) || (delta > 0 && canScrollRight)) {
+        e.preventDefault();
+
+        // Temporarily suspend CSS scroll-snap and smooth behavior to prevent animation conflict & stutter
+        if (!track._isWheelScrolling) {
+          track._isWheelScrolling = true;
+          track._origScrollSnap = track.style.scrollSnapType;
+          track._origScrollBehavior = track.style.scrollBehavior;
+          track.style.scrollSnapType = 'none';
+          track.style.scrollBehavior = 'auto';
         }
+
+        // Apply scroll delta directly for immediate 60/120fps response
+        track.scrollLeft += delta * 1.18;
+
+        // Restore CSS scroll snap when user stops scrolling
+        clearTimeout(track._wheelSnapTimeout);
+        track._wheelSnapTimeout = setTimeout(() => {
+          track._isWheelScrolling = false;
+          track.style.scrollSnapType = track._origScrollSnap || '';
+          track.style.scrollBehavior = track._origScrollBehavior || '';
+        }, 160);
       }
     }, { passive: false });
 
-    // For Freeview track, cards have dedicated drag-and-drop to rearrange
-    if (track.id === 'freeview-track') {
+    // For Freeview track and Watch Live Channels track, cards have dedicated drag-and-drop to rearrange
+    if (track.id === 'freeview-track' || track.id === 'all-channels-track') {
       return;
     }
 

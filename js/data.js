@@ -777,7 +777,7 @@ const IVTV_DATA = {
       viewsNum: 1620000,
       rating: 4.8,
       genre: "Commercial Entertainment",
-      synopsis: "Britain's premier commercial channel featuring blockbuster soaps (Coronation Street, Emmerdale), live entertainment, and major sports.",
+      synopsis: "Britain's premier commercial channel featuring blockbuster soaps (Coronation Street, Emmerdale), live entertainment, and primetime series.",
       badge: "FLAGSHIP",
       tags: ["ITV", "Drama", "Soaps", "Entertainment"],
       gradient: "linear-gradient(135deg, #0284c7, #1e1b4b)",
@@ -830,10 +830,10 @@ const IVTV_DATA = {
       views: "310K",
       viewsNum: 310000,
       rating: 4.7,
-      genre: "Action & Live Sport",
-      synopsis: "High-octane action movies, iconic British cult television, live snooker tournaments, darts, and European motorsport.",
-      badge: "ACTION & SPORT",
-      tags: ["ITV", "Action", "Sport", "Motorsport"],
+      genre: "Action & Cult Television",
+      synopsis: "High-octane action movies, iconic British cult television, thrilling cinema classics, and beloved drama series.",
+      badge: "ACTION & CULT",
+      tags: ["ITV", "Action", "Cult", "Classics"],
       gradient: "linear-gradient(135deg, #d97706, #78350f)",
       logo: "assets/logos/itv4-uk.png",
       logoUrl: "https://www.freeshot.live/upload/source/ITV4-logo.png",
@@ -849,7 +849,7 @@ const IVTV_DATA = {
       viewsNum: 195000,
       rating: 4.6,
       genre: "Youth & Contemporary",
-      synopsis: "Cutting-edge comedy, bold reality, international entertainment, youth drama series, and live sporting events.",
+      synopsis: "Cutting-edge comedy, bold reality, international entertainment, youth drama series, and live music specials.",
       badge: "YOUTH & COMEDY",
       tags: ["BBC", "Youth", "Comedy", "Originals"],
       gradient: "linear-gradient(135deg, #10b981, #064e3b)",
@@ -917,7 +917,7 @@ const IVTV_DATA = {
       name: "Channel 5",
       chNumber: 105,
       category: "Entertainment",
-      iframeUrl: "https://lb.iptvnetwork.net/ls28/10105/playlist.m3u8",
+      iframeUrl: "https://www.channel5.com/channels/5#state=5",
       views: "870K",
       viewsNum: 870000,
       rating: 4.7,
@@ -927,9 +927,9 @@ const IVTV_DATA = {
       tags: ["Channel 5", "Factual", "Drama", "UK", "Live"],
       gradient: "linear-gradient(135deg, #b91c1c, #450a0a)",
       logo: "assets/logos/channel5.svg",
-      logoUrl: "http://www.freeintertv.com/modules/Main/image/channel5.jpg",
-      sourcePage: "http://www.freeintertv.com/view/id-2216",
-      playerPage: "http://www.freeintertv.com/view/id-2216/1-1-0-1"
+      logoUrl: "assets/logos/channel5.svg",
+      sourcePage: "https://www.channel5.com/channels/5#state=5",
+      playerPage: "https://www.channel5.com/channels/5#state=5"
     },
     {
       id: "movies4men",
@@ -1296,6 +1296,18 @@ const IVTV_DATA = {
 
   heroShowcases: [
     {
+      id: "hero-ivtv-intro",
+      channelId: "sky-atlantic-uk",
+      title: "IVTV — CINEMATIC LIVE TV",
+      subtitle: "OFFICIAL INTRO • 70 UK & SKY CHANNELS",
+      rating: 5.0,
+      category: "Featured",
+      badges: ["IVTV EXCLUSIVE", "4K ULTRA HD", "70 LIVE CHANNELS", "CINEMATIC SHOWCASE"],
+      synopsis: "Welcome to IVTV. Experience world-class television, Sky Cinema premieres, Premier League sports, and award-winning prestige entertainment in one seamless cinematic player.",
+      image: "assets/images/hero-cinema-neon.jpg",
+      video: "assets/videos/ivtv-intro.mp4"
+    },
+    {
       id: "hero-streaming-universe",
       channelId: "sky-cinema-premiere-uk",
       title: "BLOCKBUSTERS & HIT PREMIERES",
@@ -1307,15 +1319,15 @@ const IVTV_DATA = {
       image: "assets/images/hero-cinema-neon.jpg"
     },
     {
-      id: "hero-premier-league",
-      channelId: "sky-sports-premier-league-uk",
-      title: "PREMIER LEAGUE LIVE",
-      subtitle: "SKY SPORTS PREMIER LEAGUE • CH 402",
-      rating: 4.9,
-      category: "Sports",
-      badges: ["CH 402", "LIVE 1080P", "SUPER SUNDAY", "631K VIEWERS", "TACTICAL CAM"],
-      synopsis: "Super Sunday live match coverage with pitchside analysis, tactical breakdowns, 4K multi-angle replays and live stadium atmosphere on Sky Sports.",
-      image: "assets/images/hero-sports-neon.jpg"
+      id: "hero-film4-cinema",
+      channelId: "film4-uk",
+      title: "HOLLYWOOD MOVIES & INDIE CINEMA",
+      subtitle: "FILM4 • CH 313",
+      rating: 4.8,
+      category: "Cinema",
+      badges: ["CH 313", "CINEMA HITS", "OSCAR WINNERS", "380K VIEWERS", "NOW STREAMING"],
+      synopsis: "The UK's celebrated movie destination. Acclaimed Hollywood blockbusters, modern cinema gems, and award-winning international motion pictures broadcasting in pristine HD.",
+      image: "assets/images/hero-action.jpg"
     },
     {
       id: "hero-news-wire",
@@ -1343,7 +1355,7 @@ const IVTV_DATA = {
 
   // Genre Discover Tiles with High-Impact Visual Backdrops
   genres: [
-    { name: "Live Sports", category: "Sports", icon: "🏆", image: "assets/images/hero-sports-neon.jpg", gradient: "linear-gradient(135deg, rgba(0, 255, 136, 0.4), rgba(11, 14, 17, 0.9))" },
+    { name: "Documentaries", category: "Entertainment", icon: "🌿", image: "assets/images/cards/card-nature.jpg", gradient: "linear-gradient(135deg, rgba(16, 185, 129, 0.4), rgba(11, 14, 17, 0.9))" },
     { name: "Sky Cinema", category: "Cinema", icon: "🍿", image: "assets/images/hero-cinema-neon.jpg", gradient: "linear-gradient(135deg, rgba(0, 229, 255, 0.35), rgba(11, 14, 17, 0.9))" },
     { name: "Action & Thrillers", category: "Cinema", icon: "💥", image: "assets/images/genre-action.jpg", gradient: "linear-gradient(135deg, rgba(16, 185, 129, 0.4), rgba(11, 14, 17, 0.9))" },
     { name: "Breaking News", category: "News", icon: "📡", image: "assets/images/hero-news-neon.jpg", gradient: "linear-gradient(135deg, rgba(239, 68, 68, 0.4), rgba(11, 14, 17, 0.9))" },
@@ -1354,7 +1366,6 @@ const IVTV_DATA = {
   // Streaming Platforms / Networks Hub
   networks: [
     { id: "all", name: "All Channels", type: "all" },
-    { id: "sky-sports", name: "Sky Sports", type: "Sports", badgeClass: "sports", icon: "assets/logos/sky-sports-premier-league-uk.png" },
     { id: "sky-cinema", name: "Sky Cinema", type: "Cinema", badgeClass: "cinema", icon: "assets/logos/sky-cinema-premiere-uk.png" },
     { id: "sky-atlantic", name: "Sky Atlantic", type: "Entertainment", badgeClass: "atlantic", icon: "assets/logos/sky-atlantic-uk.png" },
     { id: "sky-news", name: "Sky News", type: "News", badgeClass: "news", icon: "assets/logos/sky-news.png" },

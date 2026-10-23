@@ -27,10 +27,16 @@ class FavoritesManager {
   loadFavorites() {
     try {
       const data = localStorage.getItem(IVTV_STORAGE_KEYS.FAVORITES);
-      return data ? JSON.parse(data) : ['sky-sports-premier-league-uk', 'sky-sports-f1-uk', 'sky-atlantic-uk'];
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(id => !id.includes('sport') && !id.includes('f1') && !id.includes('premier-league'));
+        }
+      }
+      return ['sky-atlantic-uk', 'sky-cinema-premiere-uk', 'bbc-one-uk'];
     } catch (e) {
       console.warn('LocalStorage error', e);
-      return ['sky-sports-premier-league-uk', 'sky-sports-f1-uk'];
+      return ['sky-atlantic-uk', 'sky-cinema-premiere-uk', 'bbc-one-uk'];
     }
   }
 

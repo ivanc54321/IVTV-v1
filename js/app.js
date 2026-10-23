@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // AUTO-VERSION CHECK & HARD CACHE PURGE (STANDALONE DESKTOP SYNC)
   // Ensures standalone app window always displays latest code without cache lag
   // ==========================================================================
-  const APP_BUILD_VER = 'v40';
+  const APP_BUILD_VER = 'v60';
   const lastKnownVer = localStorage.getItem('ivtv_client_build_ver');
 
   if (lastKnownVer !== APP_BUILD_VER) {
@@ -65,6 +65,32 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         window.location.reload(true);
       }, 150);
+    });
+  }
+
+  // Handle PWA / Standalone Desktop Installation
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+  });
+
+  const installAppBtn = document.getElementById('nav-install-app-btn');
+  if (installAppBtn) {
+    installAppBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          if (window.showToast) window.showToast('IVTV installed to desktop successfully!', 'success');
+        }
+        deferredPrompt = null;
+      } else {
+        if (window.showToast) {
+          window.showToast('Standalone desktop app ready! Launch "IV - TV" from your Desktop.', 'success');
+        }
+      }
     });
   }
 

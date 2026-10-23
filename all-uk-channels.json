@@ -552,10 +552,10 @@
       "id": "channel5",
       "name": "Channel 5",
       "category": "Entertainment",
-      "iframeUrl": "https://lb.iptvnetwork.net/ls28/10105/playlist.m3u8",
+      "iframeUrl": "https://www.channel5.com/channels/5#state=5",
       "views": "870K",
-      "logoUrl": "http://www.freeintertv.com/modules/Main/image/channel5.jpg",
-      "sourcePage": "http://www.freeintertv.com/view/id-2216",
+      "logoUrl": "assets/logos/channel5.svg",
+      "sourcePage": "https://www.channel5.com/channels/5#state=5",
       "viewsNum": 870000
     },
     {
