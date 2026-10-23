@@ -63,7 +63,7 @@ Shortcuts have been configured directly on your Windows Desktop and Start Menu:
 
 ### Option 2: From File Explorer
 Simply double-click the helper scripts inside the project directory:
-- **[launch.bat](file:///c:/Users/ivanc/IV%20-%20TV/launch.bat)** (or `launch.vbs`): Starts the server silently in the background (using `pythonw.exe`) with zero console flickering and opens `http://localhost:5173`.
+- **[launch.bat](file:///c:/Users/ivanc/IV%20-%20TV/launch.bat)** (or `launch.vbs`): Starts the server silently in the background and opens `http://localhost:5173`. Python 3 must be installed; the launcher uses the Windows Python launcher when available, so VS Code does not need to be open.
 - **[stop.bat](file:///c:/Users/ivanc/IV%20-%20TV/stop.bat)** (or `stop.vbs`): Cleanly terminates the background server listening on port 5173.
 
 ---
@@ -88,5 +88,4 @@ IVTV is fully engineered for zero-latency offline use with zero external CDN dep
    - Real-time connectivity monitor in navbar: displays **ONLINE** (green pulse) when connected and **OFFLINE** (amber) when disconnected.
    - When offline, the complete **24-hour EPG TV Guide**, **Watchlist & Favorites**, **All UK Channels Directory**, and instant search remain 100% operational.
    - The theater player provides intelligent offline notifications with direct 1-click access to the TV Guide.
-
 

@@ -3,15 +3,48 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 oShell.CurrentDirectory = scriptDir
 
-' 1. Locate pythonw executable for silent background operation
-Dim pythonExe
-pythonExe = "pythonw.exe"
-If fso.FileExists("C:\Python313\pythonw.exe") Then
-    pythonExe = "C:\Python313\pythonw.exe"
-ElseIf fso.FileExists("C:\Python312\pythonw.exe") Then
-    pythonExe = "C:\Python312\pythonw.exe"
-ElseIf fso.FileExists("C:\Python311\pythonw.exe") Then
-    pythonExe = "C:\Python311\pythonw.exe"
+' 1. Locate Python independently of the environment used to launch this script.
+Dim pythonExe, pythonArgs, windowsDir, pythonDirs, pythonDir, pathDirs, pathDir, pathCandidate
+pythonExe = ""
+pythonArgs = ""
+windowsDir = oShell.ExpandEnvironmentStrings("%SystemRoot%")
+
+If fso.FileExists(windowsDir & "\pyw.exe") Then
+    pythonExe = windowsDir & "\pyw.exe"
+    pythonArgs = "-3 "
+Else
+    pythonDirs = Array( _
+        "C:\Python313", _
+        "C:\Python312", _
+        "C:\Python311", _
+        oShell.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python313", _
+        oShell.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python312", _
+        oShell.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python311" _
+    )
+
+    For Each pythonDir In pythonDirs
+        If fso.FileExists(pythonDir & "\pythonw.exe") Then
+            pythonExe = pythonDir & "\pythonw.exe"
+            Exit For
+        End If
+    Next
+
+    If pythonExe = "" Then
+        pathDirs = Split(oShell.ExpandEnvironmentStrings("%PATH%"), ";")
+        For Each pathDir In pathDirs
+            pathCandidate = Replace(pathDir, """", "")
+            If pathCandidate <> "" And fso.FileExists(pathCandidate & "\pythonw.exe") Then
+                pythonExe = pathCandidate & "\pythonw.exe"
+                Exit For
+            End If
+        Next
+    End If
+End If
+
+If pythonExe = "" Then
+    MsgBox "Python 3 was not found, so IV TV cannot start." & vbCrLf & _
+           "Install Python 3 for Windows, then run launch.bat again.", vbCritical, "IV TV Error"
+    WScript.Quit 1
 End If
 
 ' 2. Ultra-fast native HTTP check (under 15ms) to determine if server is active
@@ -36,15 +69,15 @@ End Function
 If Not IsServerRunning() Then
     ' Start server in background without flashing any command prompt window
     Dim cmd
-    cmd = """" & pythonExe & """ """ & scriptDir & "\server.py"""
+    cmd = """" & pythonExe & """ " & pythonArgs & """" & scriptDir & "\server.py"""
     oShell.Run cmd, 0, False
 
-    ' Wait up to 5 seconds for server to initialize
+    ' Allow time for Python to start and initialize the server.
     Dim attempts, ready
     attempts = 0
     ready = False
-    Do While attempts < 15 And Not ready
-        WScript.Sleep 300
+    Do While attempts < 30 And Not ready
+        WScript.Sleep 500
         attempts = attempts + 1
         If IsServerRunning() Then
             ready = True
@@ -54,7 +87,8 @@ If Not IsServerRunning() Then
 
     If Not ready Then
         MsgBox "Failed to start IV TV server on http://localhost:5173." & vbCrLf & _
-               "Please check server.log in the IV - TV folder for details.", vbCritical, "IV TV Error"
+               "Python was found at:" & vbCrLf & pythonExe & vbCrLf & vbCrLf & _
+               "Check server.log in the IV - TV folder for startup errors.", vbCritical, "IV TV Error"
         WScript.Quit 1
     End If
 End If
