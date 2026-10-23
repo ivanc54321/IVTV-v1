@@ -24,19 +24,15 @@ class UIController {
 
   init() {
     this.renderHero();
-    this.renderSpotlightTrio();
     this.renderTopRanked();
     this.renderFreeviewSection();
     this.renderProvidersBar();
-    this.renderAllUKChannels();
     this.renderCategorySections();
-    this.renderGenreTiles();
     this.renderEPG();
     this.setupEPGClock();
     this.setupHeroAutoSlide();
     this.setupHeroActions();
     this.setupEventListeners();
-    this.setupAllChannelsEventListeners();
 
     // Expose global hero tuner for buttons and hotkeys
     window.tuneHeroChannel = () => this.tuneHeroChannel();
@@ -111,14 +107,14 @@ class UIController {
       badgesEl.innerHTML = '';
     }
 
-    // Render Hero Thumbnails Slider & Pagination Dots
-    this.renderHeroThumbnails();
+    // Render hero slide pagination
+    this.renderHeroPagination();
   }
 
   setupHeroActions() {
     const playBtn = document.getElementById('hero-play-btn');
     const guideBtn = document.getElementById('hero-guide-btn');
-    const dirBtn = document.getElementById('hero-directory-btn');
+    const browseBtn = document.getElementById('hero-browse-btn');
 
     if (playBtn) {
       this.updateHeroPlayButtonHint();
@@ -147,12 +143,12 @@ class UIController {
       });
     }
 
-    if (dirBtn) {
-      dirBtn.addEventListener('click', (e) => {
+    if (browseBtn) {
+      browseBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        const allSec = document.getElementById('all-uk-channels-section') || document.getElementById('sky-channels-section');
-        if (allSec) {
-          allSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const skySection = document.getElementById('sky-channels-section');
+        if (skySection) {
+          skySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       });
     }
@@ -191,42 +187,9 @@ class UIController {
     }
   }
 
-  renderHeroThumbnails() {
+  renderHeroPagination() {
     const showcases = window.IVTV_DATA.heroShowcases;
-    const thumbsContainer = document.getElementById('hero-thumbnails');
     const paginationContainer = document.getElementById('hero-pagination');
-
-    if (thumbsContainer) {
-      thumbsContainer.innerHTML = showcases
-        .map((showcase, index) => ({ showcase, index }))
-        .filter(({ showcase }) => !showcase.video)
-        .map(({ showcase: s, index: idx }) => `
-        <div class="hero-thumb-card ${idx === this.currentHeroIndex ? 'active' : ''}" data-index="${idx}">
-          <img class="hero-thumb-img" src="${s.image}" alt="${s.title}">
-          <div class="hero-thumb-overlay">
-            <div class="hero-thumb-badge-row">
-              <span class="hero-thumb-cat">${s.video ? '▶ ' + s.category.toUpperCase() : s.category.toUpperCase()}</span>
-              <span class="hero-thumb-live-dot"></span>
-            </div>
-            <span class="hero-thumb-title">${s.title}</span>
-          </div>
-        </div>
-      `).join('');
-
-      thumbsContainer.querySelectorAll('.hero-thumb-card').forEach(card => {
-        card.addEventListener('click', () => {
-          const idx = parseInt(card.dataset.index, 10);
-          if (idx === this.currentHeroIndex) {
-            const currentShowcase = showcases[idx];
-            if (currentShowcase && window.ivtvPlayer) {
-              window.ivtvPlayer.openPlayer(currentShowcase.channelId);
-            }
-          } else {
-            this.setHeroSlide(idx);
-          }
-        });
-      });
-    }
 
     if (paginationContainer) {
       paginationContainer.innerHTML = showcases.map((_, idx) => `
@@ -500,80 +463,6 @@ class UIController {
         </div>
       </div>
     `;
-  }
-
-  // ==========================================================================
-  // FEATURED SPOTLIGHT TRIO (PRIME LIVE BROADCASTS)
-  // ==========================================================================
-
-  renderSpotlightTrio() {
-    const grid = document.getElementById('spotlight-trio-grid');
-    if (!grid) return;
-
-    // Pick 3 premier distinct live channels: News, Cinema, Entertainment (Strictly NO sports channels)
-    const primeIds = ['sky-news', 'sky-cinema-premiere-uk', 'sky-atlantic-uk'];
-    const primeChannels = primeIds
-      .map(id => window.IVTV_DATA?.channels?.find(c => c.id === id && !this.isSportsChannel(c)))
-      .filter(Boolean);
-
-    // Fallback if any ID missing — strictly non-sports channels
-    if (primeChannels.length < 3) {
-      const nonSportsFallback = this.getHomeChannels().filter(c => !primeChannels.some(p => p.id === c.id));
-      primeChannels.push(...nonSportsFallback.slice(0, 3 - primeChannels.length));
-    }
-
-    grid.innerHTML = primeChannels.map(ch => {
-      const prog = window.ivtvEPG ? window.ivtvEPG.getCurrentProgram(ch.id) : null;
-      const progTitle = prog ? prog.title : 'Live Television Broadcast';
-      const progTime = prog ? `${prog.startTimeFormatted} - ${prog.endTimeFormatted}` : '24/7 Live Broadcast';
-      const progLeft = prog ? `${prog.minutesLeft}m remaining` : 'Broadcasting Live';
-      const progPercent = prog ? (prog.progressPercent || 40) : 40;
-      const chNum = ch.chNumber ? `CH ${ch.chNumber}` : '';
-      const backdropSrc = this.getChannelBackdrop(ch);
-
-      return `
-        <div class="spotlight-card" data-channel-id="${ch.id}" onclick="window.ivtvPlayer.openPlayer('${ch.id}')">
-          <div class="spotlight-media">
-            <img class="spotlight-backdrop" src="${backdropSrc}" alt="${ch.name} Showcase" loading="lazy">
-            <div class="spotlight-overlay">
-              <div class="spotlight-play-btn">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
-              </div>
-            </div>
-            <div class="spotlight-badge-row">
-              <span class="spotlight-tag-badge">
-                <span class="live-pulse-dot" style="width:6px;height:6px;"></span>
-                <span>${ch.category}</span>
-              </span>
-              <span class="spotlight-viewers-badge">🔥 ${ch.views} viewers</span>
-            </div>
-          </div>
-          <div class="spotlight-body">
-            <div class="spotlight-channel-line">
-              <span class="spotlight-channel-name">${ch.name}</span>
-              ${chNum ? `<span class="spotlight-ch-num">${chNum}</span>` : ''}
-            </div>
-            <div class="spotlight-now-box">
-              <div class="spotlight-program-title" title="${progTitle}">${progTitle}</div>
-              <div class="spotlight-program-meta">
-                <span>${progTime}</span>
-                <span style="color:var(--accent-neon);">${progLeft}</span>
-              </div>
-              <div class="spotlight-progress-wrap">
-                <div class="spotlight-progress-fill" style="width: ${progPercent}%;"></div>
-              </div>
-            </div>
-            <div class="spotlight-footer">
-              <span class="spotlight-genre-tag">${ch.genre || ch.category} • HD Broadcast</span>
-              <span class="spotlight-watch-action">
-                <span>Watch Live</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-              </span>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
   }
 
   // ==========================================================================
@@ -1510,42 +1399,6 @@ class UIController {
   }
 
   // ==========================================================================
-  // BROWSE BY GENRE TILES
-  // ==========================================================================
-
-  renderGenreTiles() {
-    const grid = document.getElementById('genre-grid');
-    if (!grid) return;
-
-    grid.innerHTML = window.IVTV_DATA.genres.map(g => {
-      const imgHtml = g.image 
-        ? `<img src="${g.image}" class="genre-tile-backdrop" alt="${g.name}">` 
-        : `<div class="genre-tile-backdrop" style="background: ${g.gradient};"></div>`;
-
-      return `
-        <div class="genre-tile" onclick="window.UIControllerInstance.filterByGenre('${g.category}')">
-          ${imgHtml}
-          <div class="genre-tile-gradient"></div>
-          <div class="genre-tile-title">${g.icon} ${g.name}</div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  filterByGenre(category) {
-    this.activeFilter = category;
-    this.renderProvidersBar();
-    this.applyFilter();
-    window.showToast(`Showing ${category} channels`, 'info');
-    
-    // Smooth scroll to relevant section
-    const target = document.getElementById(`${category.toLowerCase()}-section`) || document.getElementById('top-ranked-section');
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth' });
-    }
-  }
-
-  // ==========================================================================
   // SEARCH & FILTERING LOGIC
   // ==========================================================================
 
@@ -1602,13 +1455,11 @@ class UIController {
 
   applyFilter() {
     const filter = this.activeFilter;
-    const allSection = document.getElementById('all-uk-channels-section');
     const cinemaSection = document.getElementById('cinema-section');
     const entertainmentSection = document.getElementById('entertainment-section');
     const newsSection = document.getElementById('news-section');
 
     const showAll = () => {
-      if (allSection) allSection.style.display = 'block';
       if (cinemaSection) cinemaSection.style.display = 'block';
       if (entertainmentSection) entertainmentSection.style.display = 'block';
       if (newsSection) newsSection.style.display = 'block';
@@ -1617,20 +1468,17 @@ class UIController {
     if (filter === 'all') {
       showAll();
     } else if (filter === 'sky-cinema' || filter === 'film4' || filter === 'Cinema') {
-      if (allSection) allSection.style.display = 'block';
       if (cinemaSection) cinemaSection.style.display = 'block';
       if (entertainmentSection) entertainmentSection.style.display = 'none';
       if (newsSection) newsSection.style.display = 'none';
       cinemaSection.scrollIntoView({ behavior: 'smooth' });
     } else if (filter === 'news-network' || filter === 'News' || filter === 'sky-news') {
-      if (allSection) allSection.style.display = 'block';
       if (cinemaSection) cinemaSection.style.display = 'none';
       if (entertainmentSection) entertainmentSection.style.display = 'none';
       if (newsSection) newsSection.style.display = 'block';
       newsSection.scrollIntoView({ behavior: 'smooth' });
     } else {
       // Entertainment (BBC, ITV, Sky Atlantic, Sky Showcase, etc.)
-      if (allSection) allSection.style.display = 'block';
       if (cinemaSection) cinemaSection.style.display = 'none';
       if (entertainmentSection) entertainmentSection.style.display = 'block';
       if (newsSection) newsSection.style.display = 'none';
@@ -1642,7 +1490,6 @@ class UIController {
     const added = window.ivtvStorage.toggleFavorite(channelId);
     btn.classList.toggle('active', added);
     this.renderFavoritesRow();
-    this.renderAllUKChannels();
     window.showToast(added ? 'Added to Favorites' : 'Removed from Favorites', added ? 'success' : 'info');
   }
 
@@ -1880,7 +1727,6 @@ class UIController {
     // Remote Live EPG Sync Listener
     window.addEventListener('ivtv:epg-updated', () => {
       this.renderTopRanked();
-      this.renderAllUKChannels();
       this.renderCategorySections();
       if (this.searchQuery) {
         this.handleSearch(this.searchQuery);
@@ -1894,9 +1740,6 @@ class UIController {
     // Real-Time Views & Watch Tracking Listener
     window.addEventListener('ivtv:views-updated', () => {
       this.renderTopRanked();
-      if (this.allChannelsSort === 'views') {
-        this.renderAllUKChannels();
-      }
     });
 
     // Hero Nav Buttons
@@ -2066,17 +1909,6 @@ class UIController {
           return;
         }
 
-        if (filter === 'all') {
-          this.activeFilter = 'all';
-          const allSection = document.getElementById('all-uk-channels-section');
-          if (allSection) {
-            allSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-          const allPill = document.querySelector('.filter-pill[data-category="all"]');
-          if (allPill) allPill.click();
-          return;
-        }
-
         this.activeFilter = filter;
         const secMap = {
           'Entertainment': 'entertainment-section',
@@ -2119,7 +1951,6 @@ class UIController {
         if (burgerBtnEl) burgerBtnEl.classList.remove('active');
 
         const sections = [
-          { id: 'all-uk-channels-section', nav: 'all' },
           { id: 'cinema-section', nav: 'Cinema' },
           { id: 'news-section', nav: 'News' },
           { id: 'entertainment-section', nav: 'Entertainment' },
@@ -2260,7 +2091,6 @@ class UIController {
     window.addEventListener('ivtv:favorites-changed', () => {
       this.renderFavoritesRow();
       this.renderTopRanked();
-      this.renderAllUKChannels();
     });
 
     // Initialize Mouse Wheel & Drag-to-Scroll on all carousels
@@ -2273,7 +2103,7 @@ class UIController {
 
   initCarouselMouseNavigation() {
     // Select all horizontal tracks across home, hero, categories, and player
-    const tracks = document.querySelectorAll('.carousel-track, .hero-thumbnails-row, .ranked-channels-track, #theater-surf-list, #header-nav-pills');
+    const tracks = document.querySelectorAll('.carousel-track, .ranked-channels-track, #theater-surf-list, #header-nav-pills');
     tracks.forEach(track => this.enableHorizontalScrollAndDrag(track));
   }
 
@@ -2314,8 +2144,8 @@ class UIController {
       }
     }, { passive: false });
 
-    // For Freeview track and Watch Live Channels track, cards have dedicated drag-and-drop to rearrange
-    if (track.id === 'freeview-track' || track.id === 'all-channels-track') {
+    // Freeview cards have dedicated drag-and-drop to rearrange
+    if (track.id === 'freeview-track') {
       return;
     }
 

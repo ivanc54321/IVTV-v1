@@ -987,16 +987,18 @@ def proxy_hls_stream(handler, target_url, referer_override=None):
         if 'wideiptv.top' in referer_override:
             headers['Origin'] = 'https://wideiptv.top'
 
-    content = None
-    content_type = 'application/octet-stream'
+    upstream = None
 
     for attempt in range(2):
         try:
-            req = urllib.request.Request(target_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as upstream:
-                content = upstream.read()
-                content_type = upstream.headers.get('Content-Type', 'application/octet-stream')
-                break
+            request_headers = dict(headers)
+            for header in ('Range', 'If-Range'):
+                value = handler.headers.get(header)
+                if value:
+                    request_headers[header] = value
+            req = urllib.request.Request(target_url, headers=request_headers)
+            upstream = urllib.request.urlopen(req, timeout=10)
+            break
         except urllib.error.HTTPError as e:
             if e.code in (401, 403, 404) and slug and attempt == 0:
                 print(f"[HLS Proxy] Stale/expired upstream token or manifest ({e.code}) for slug '{slug}'. Auto-recovering fresh token...")
@@ -1028,14 +1030,22 @@ def proxy_hls_stream(handler, target_url, referer_override=None):
                 pass
             return
 
+    if upstream is None:
+        return
+
+    response_started = False
     try:
-        is_m3u8 = (
-            target_url.endswith('.m3u8') or
-            'mpegurl' in content_type.lower() or
-            (content and content.startswith(b'#EXTM3U'))
+        content_type = upstream.headers.get('Content-Type', 'application/octet-stream')
+        playlist_hint = (
+            urllib.parse.urlparse(target_url).path.lower().endswith('.m3u8') or
+            'mpegurl' in content_type.lower()
         )
+        read_stream_chunk = getattr(upstream, 'read1', upstream.read)
+        prefix = b'' if playlist_hint else read_stream_chunk(10)
+        is_m3u8 = playlist_hint or prefix.lstrip(b'\xef\xbb\xbf \t\r\n').startswith(b'#EXTM3U')
         
-        if is_m3u8 and content:
+        if is_m3u8:
+            content = (prefix + upstream.read()) if prefix else upstream.read()
             text = content.decode('utf-8', errors='ignore')
             lines = text.splitlines()
             rewritten = []
@@ -1083,26 +1093,44 @@ def proxy_hls_stream(handler, target_url, referer_override=None):
             handler.send_header('Pragma', 'no-cache')
             handler.send_header('Expires', '0')
             handler.end_headers()
+            response_started = True
             handler.wfile.write(body)
         else:
-            handler.send_response(200)
+            handler.send_response(upstream.getcode())
             handler.send_header('Content-Type', content_type)
             handler.send_header('Access-Control-Allow-Origin', '*')
-            handler.send_header('Cache-Control', 'public, max-age=3600')
+            handler.send_header('Cache-Control', 'no-store')
+            for header in ('Content-Length', 'Content-Range', 'Accept-Ranges'):
+                value = upstream.headers.get(header)
+                if value:
+                    handler.send_header(header, value)
             handler.end_headers()
-            if content:
-                handler.wfile.write(content)
+            response_started = True
+            if prefix:
+                handler.wfile.write(prefix)
+                handler.wfile.flush()
+            while True:
+                chunk = read_stream_chunk(64 * 1024)
+                if not chunk:
+                    break
+                handler.wfile.write(chunk)
+                handler.wfile.flush()
     except (BrokenPipeError, ConnectionResetError):
         pass
     except Exception as e:
-        try:
-            handler.send_response(502)
-            handler.send_header('Content-Type', 'application/json')
-            handler.send_header('Access-Control-Allow-Origin', '*')
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"error": f"Upstream proxy error: {str(e)}"}).encode('utf-8'))
-        except Exception:
-            pass
+        if not response_started:
+            try:
+                handler.send_response(502)
+                handler.send_header('Content-Type', 'application/json')
+                handler.send_header('Access-Control-Allow-Origin', '*')
+                handler.end_headers()
+                handler.wfile.write(json.dumps({"error": f"Upstream proxy error: {str(e)}"}).encode('utf-8'))
+            except Exception:
+                pass
+        else:
+            print(f"[HLS Proxy] Streaming response interrupted: {e}")
+    finally:
+        upstream.close()
 
 def proxy_embed(handler, target_url):
     if not target_url:
