@@ -998,11 +998,15 @@ def proxy_hls_stream(handler, target_url, referer_override=None):
                 content_type = upstream.headers.get('Content-Type', 'application/octet-stream')
                 break
         except urllib.error.HTTPError as e:
-            if e.code in (401, 403) and slug and attempt == 0:
-                print(f"[HLS Proxy] Stale/expired upstream token ({e.code}) for slug '{slug}'. Auto-recovering fresh token...")
+            if e.code in (401, 403, 404) and slug and attempt == 0:
+                print(f"[HLS Proxy] Stale/expired upstream token or manifest ({e.code}) for slug '{slug}'. Auto-recovering fresh token...")
                 recovered_token = get_valid_token_for_slug(slug, force_new=True)
                 if recovered_token:
-                    target_url = re.sub(r'token=[^&]+', f'token={recovered_token}', target_url)
+                    if 'token=' in target_url:
+                        target_url = re.sub(r'token=[^&]+', f'token={recovered_token}', target_url)
+                    else:
+                        sep = '&' if '?' in target_url else '?'
+                        target_url = f"{target_url}{sep}token={recovered_token}"
                     continue
             try:
                 handler.send_response(e.code)

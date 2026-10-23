@@ -1441,6 +1441,23 @@ class PlayerController {
 
       this.hls.on(Hls.Events.ERROR, (event, data) => {
         const now = Date.now();
+        const upstreamHttpCode = data && data.response && Number(data.response.code);
+        const isForbiddenStream = [403, 404, 410].includes(upstreamHttpCode) ||
+          (data &&
+            data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+            data.details === Hls.ErrorDetails.HTTP_ERROR &&
+            data.response &&
+            [403, 404, 410].includes(data.response.code));
+
+        if (isForbiddenStream) {
+          console.warn('[IVTV Player] Upstream HLS media rejected or expired, switching to Mirror Player.');
+          const ch = this.currentChannel;
+          const fallback = fallbackEmbedUrl || (ch && ch.iframeUrl);
+          if (fallback) {
+            this.loadEmbedMirror(this.currentChannel?.id, fallback);
+            return;
+          }
+        }
 
         // 1. Buffer stall handling
         if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {

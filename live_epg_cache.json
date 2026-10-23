@@ -1,6 +1,6 @@
 {
   "status": "success",
-  "timestamp": 1792759756,
+  "timestamp": 1792768898,
   "date": "20261023",
   "source": "Freeview Official (freeview.co.uk) & Sky UK Hawk Linear EPG",
   "channels": {
@@ -10606,7 +10606,7 @@
           "startMin": 45,
           "durationMinutes": 50,
           "tag": "Live Sport",
-          "desc": "The opening race of the F1 Academy weekend in Austin, Texas.",
+          "desc": "For the first time since late August in Zandvoort, the all-female F1 Academy field takes to the track for points-scoring action in Texas with the first of three races this weekend.",
           "isMovie": false,
           "isSport": true,
           "epochStart": 1792795500,
@@ -13279,7 +13279,7 @@
           "startMin": 45,
           "durationMinutes": 50,
           "tag": "Live Sport",
-          "desc": "The opening race of the F1 Academy weekend in Austin, Texas.",
+          "desc": "For the first time since late August in Zandvoort, the all-female F1 Academy field takes to the track for points-scoring action in Texas with the first of three races this weekend.",
           "isMovie": false,
           "isSport": true,
           "epochStart": 1792795500,
