@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================================================
   if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=49')
+      navigator.serviceWorker.register('sw.js?v=50')
         .then((reg) => {
           reg.update();
           console.log('[IVTV PWA] Service Worker registered successfully (scope: ' + reg.scope + ')');
