@@ -1452,40 +1452,194 @@ def proxy_embed(handler, target_url):
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
     }
     try:
-        # Dedicated Channel 4 official live feed proxy (strips X-Frame-Options and cookie popups)
+        # Dedicated Channel 4 official live feed broadcast hub
         if 'channel4.com' in target_url:
-            req_c4 = urllib.request.Request(target_url, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Referer': 'https://www.channel4.com/'
-            })
-            with urllib.request.urlopen(req_c4, timeout=10) as resp_c4:
-                c4_html = resp_c4.read().decode('utf-8', errors='ignore')
+            ch_title = "Channel 4"
+            badge_text = "UK FREEVIEW 104 • LIVE BROADCAST"
+            logo_path = "/assets/logos/channel4.png"
+            if '/now/E4' in target_url:
+                ch_title = "E4"
+                badge_text = "UK FREEVIEW 135 • LIVE BROADCAST"
+                logo_path = "/assets/logos/e4-uk.png"
+            elif '/now/M4' in target_url:
+                ch_title = "More4"
+                badge_text = "UK FREEVIEW 136 • LIVE BROADCAST"
+                logo_path = "/assets/logos/more4-uk.png"
+            elif '/now/4S' in target_url:
+                ch_title = "4seven"
+                badge_text = "UK FREEVIEW 137 • LIVE BROADCAST"
+                logo_path = "/assets/logos/4seven-uk.png"
 
-            c4_injected = """
-            <base href="https://www.channel4.com/">
-            <style>
-              body, html {
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 100vw !important;
-                height: 100vh !important;
-                background: #000 !important;
-                overflow-x: hidden !important;
-              }
-              #onetrust-consent-sdk, .onetrust-pc-dark, #onetrust-banner-sdk {
-                display: none !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-              }
-            </style>
-            """
-            c4_mod = c4_html.replace('<head>', f'<head>{c4_injected}', 1) if '<head>' in c4_html else (c4_injected + c4_html)
+            c4_hub_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{ch_title} — Live Broadcast</title>
+  <style>
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body, html {{
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at 50% 35%, #082f49 0%, #031422 60%, #000205 100%);
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+    }}
+    .c4-hub-card {{
+      position: relative;
+      background: rgba(8, 47, 73, 0.45);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 50px rgba(2, 132, 199, 0.2);
+      border-radius: 20px;
+      padding: 2.25rem 2.5rem;
+      max-width: 520px;
+      width: 90%;
+      text-align: center;
+      animation: cardFadeIn 0.4s ease-out;
+    }}
+    @keyframes cardFadeIn {{
+      from {{ opacity: 0; transform: translateY(12px) scale(0.98); }}
+      to {{ opacity: 1; transform: translateY(0) scale(1); }}
+    }}
+    .logo-container {{
+      margin-bottom: 1.25rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 0 20px rgba(56, 189, 248, 0.4));
+    }}
+    .badge-row {{
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(2, 132, 199, 0.18);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #38bdf8;
+      margin-bottom: 1.15rem;
+    }}
+    .live-dot {{
+      width: 7px;
+      height: 7px;
+      background: #00f076;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #00f076;
+      animation: pulseDot 1.4s ease-in-out infinite;
+    }}
+    @keyframes pulseDot {{
+      0%, 100% {{ transform: scale(1); opacity: 1; }}
+      50% {{ transform: scale(1.35); opacity: 0.6; }}
+    }}
+    h1 {{
+      font-size: 1.75rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+    }}
+    p {{
+      color: #94a3b8;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      margin-bottom: 1.75rem;
+    }}
+    .actions {{
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      align-items: center;
+      width: 100%;
+    }}
+    .c4-watch-btn, a[href*="channel4.com"] {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      color: #ffffff !important;
+      text-decoration: none !important;
+      font-size: 1.05rem;
+      font-weight: 700;
+      padding: 0.9rem 1.8rem;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 8px 25px rgba(2, 132, 199, 0.45);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      width: 100%;
+    }}
+    .c4-watch-btn:hover, a[href*="channel4.com"]:hover {{
+      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(2, 132, 199, 0.65);
+    }}
+    .secondary-btn {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      padding: 0.6rem 1rem;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      width: 100%;
+    }}
+    .secondary-btn:hover {{
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.25);
+    }}
+  </style>
+</head>
+<body>
+  <div class="c4-hub-card">
+    <div class="badge-row">
+      <span class="live-dot"></span>
+      <span>{badge_text}</span>
+    </div>
+    <div class="logo-container">
+      <img src="{logo_path}" alt="{ch_title}" style="height: 54px; object-fit: contain;">
+    </div>
+    <h1>{ch_title} Live</h1>
+    <p>Official UK Public Service broadcast with crystal-clear 1080p HD live playback. Click below to stream live directly.</p>
+    <div class="actions">
+      <a href="{target_url}" target="_blank" class="c4-watch-btn" id="c4-live-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+        <span>Watch {ch_title} Live</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+      <button class="secondary-btn" onclick="window.open('{target_url}', '_blank', 'width=1080,height=680,scrollbars=yes,resizable=yes')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        <span>Pop-out Floating Window</span>
+      </button>
+    </div>
+  </div>
+</body>
+</html>"""
             handler.send_response(200)
             handler.send_header('Content-Type', 'text/html; charset=utf-8')
             handler.send_header('Access-Control-Allow-Origin', '*')
             handler.end_headers()
-            handler.wfile.write(c4_mod.encode('utf-8'))
+            handler.wfile.write(c4_hub_html.encode('utf-8'))
             return
 
         # Check if target is a FreeInterTV channel page

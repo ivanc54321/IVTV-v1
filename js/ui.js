@@ -2247,7 +2247,9 @@ class UIController {
 
   initCarouselMouseNavigation() {
     // Select all horizontal tracks across home, hero, categories, and player
-    const tracks = document.querySelectorAll('.carousel-track, .ranked-channels-track, #theater-surf-list, #header-nav-pills');
+    const tracks = document.querySelectorAll(
+      '.carousel-track, .ranked-channels-track, #theater-surf-list, #theater-surf-cats, #header-nav-pills, .surf-channel-list, .us-tv-rail-track, #side-guide-categories'
+    );
     tracks.forEach(track => this.enableHorizontalScrollAndDrag(track));
   }
 
@@ -2255,16 +2257,24 @@ class UIController {
     if (!track || track._hasScrollDragInit) return;
     track._hasScrollDragInit = true;
 
+    const isInsidePlayer = Boolean(track.closest('#theater-modal'));
+
     // 1. Mouse Wheel Scroll -> Responsive, Silk-Smooth Horizontal Scroll
-    track.addEventListener('wheel', (e) => {
+    const onWheel = (e) => {
       const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
       if (!delta) return;
+
+      if (isInsidePlayer) {
+        // ALWAYS isolate wheel events inside player modal so they never leak to background volume
+        e.stopPropagation();
+      }
 
       const canScrollLeft = track.scrollLeft > 0;
       const canScrollRight = track.scrollLeft < (track.scrollWidth - track.clientWidth - 2);
 
       if ((delta < 0 && canScrollLeft) || (delta > 0 && canScrollRight)) {
         e.preventDefault();
+        e.stopPropagation();
 
         // Temporarily suspend CSS scroll-snap and smooth behavior to prevent animation conflict & stutter
         if (!track._isWheelScrolling) {
@@ -2276,7 +2286,7 @@ class UIController {
         }
 
         // Apply scroll delta directly for immediate 60/120fps response
-        track.scrollLeft += delta * 1.18;
+        track.scrollLeft += delta * 1.25;
 
         // Restore CSS scroll snap when user stops scrolling
         clearTimeout(track._wheelSnapTimeout);
@@ -2286,7 +2296,16 @@ class UIController {
           track.style.scrollBehavior = track._origScrollBehavior || '';
         }, 160);
       }
-    }, { passive: false });
+    };
+
+    track.addEventListener('wheel', onWheel, { passive: false });
+
+    // Also support wheeling on parent track wrapper (covers gaps, padding, and nav buttons)
+    const wrapper = track.closest('.carousel-track-wrapper, .surf-carousel-wrapper');
+    if (wrapper && !wrapper._hasWheelInit) {
+      wrapper._hasWheelInit = true;
+      wrapper.addEventListener('wheel', onWheel, { passive: false });
+    }
 
     // Freeview cards have dedicated drag-and-drop to rearrange
     if (track.id === 'freeview-track') {
@@ -2303,7 +2322,14 @@ class UIController {
     let lastTime = 0;
 
     track.addEventListener('mousedown', (e) => {
-      if (e.target.closest('button') || e.target.closest('input') || e.button !== 0) return;
+      if (e.button !== 0) return;
+      // Do not initiate track drag if user clicked input or specific action buttons (like favorite star or modal buttons)
+      if (e.target.closest('input') || 
+          e.target.closest('.card-fav-btn') || 
+          e.target.closest('.theater-action-btn') || 
+          e.target.closest('.surf-nav-btn') || 
+          e.target.closest('.carousel-nav-btn')) return;
+
       isDown = true;
       hasDragged = false;
       startX = e.pageX;
@@ -2311,7 +2337,6 @@ class UIController {
       lastX = e.pageX;
       lastTime = Date.now();
       velocity = 0;
-      // Do NOT add is-dragging on mousedown! Only add it once the user actually moves > 5px.
     });
 
     const onMouseMove = (e) => {

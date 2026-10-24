@@ -12,6 +12,23 @@ document.addEventListener('DOMContentLoaded', () => {
     window.UIControllerInstance.init();
   }
 
+  // Handle URL Query Params for auto-play or standalone pop-out window: /?play=channelId&popout=1
+  const urlParams = new URLSearchParams(window.location.search);
+  const playTarget = urlParams.get('play') || urlParams.get('channel');
+  const isPopout = urlParams.get('popout') === '1' || urlParams.get('standalone') === '1';
+
+  if (isPopout) {
+    document.body.classList.add('popout-mode');
+  }
+
+  if (playTarget) {
+    setTimeout(() => {
+      if (window.ivtvPlayer) {
+        window.ivtvPlayer.openPlayer(playTarget);
+      }
+    }, 250);
+  }
+
   // Navbar Dynamic Blur on Scroll
   const header = document.querySelector('.app-header');
   window.addEventListener('scroll', () => {

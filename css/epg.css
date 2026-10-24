@@ -477,11 +477,14 @@
 .theater-now-label {
   font-size: 0.68rem;
   font-weight: 800;
-  background: rgba(0, 240, 118, 0.15);
+  background: rgba(0, 240, 118, 0.2);
+  border: 1px solid rgba(0, 240, 118, 0.4);
   color: var(--accent-emerald);
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
   text-transform: uppercase;
+  box-shadow: 0 0 10px rgba(0, 240, 118, 0.18);
+  letter-spacing: 0.04em;
 }
 
 .theater-now-title {
@@ -491,12 +494,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 2px 10px rgba(0, 0, 0, 0.6);
 }
 
 .theater-now-progress-wrap {
   width: 90px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
@@ -512,8 +516,9 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.76rem;
-  color: var(--text-muted);
+  color: rgba(248, 250, 252, 0.85);
   white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 
 .theater-viewers-count {
@@ -521,11 +526,12 @@
   align-items: center;
   gap: 0.4rem;
   margin-left: auto;
-  color: rgba(248, 250, 252, 0.72);
+  color: rgba(248, 250, 252, 0.82);
   font-size: 0.72rem;
   font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 
 .theater-viewers-count svg {

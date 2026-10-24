@@ -41,6 +41,7 @@ class PlayerController {
     this.surfQuery = '';
     this.osdTimer = null;
     this.controlsHideTimer = null;
+    this.isHoveringBottomSection = false;
     this.isSideGuideOpen = false;
     this.sideGuideCategory = 'all';
     this.sideGuideQuery = '';
@@ -213,9 +214,19 @@ class PlayerController {
     }
 
     // Mouse wheel volume control on video screen area
+    // Mouse wheel volume control on video screen area (isolated from drawers and overlays)
     if (this.screenArea) {
       this.screenArea.addEventListener('wheel', (e) => {
         if (!this.isOpen) return;
+        // Never trigger volume changes when scrolling over bottom controls, drawer, surf list, guide, or header
+        if (e.target.closest('#theater-bottom-overlay') || 
+            e.target.closest('#theater-surf-drawer') || 
+            e.target.closest('#theater-surf-list') || 
+            e.target.closest('#theater-side-guide') || 
+            e.target.closest('.theater-header') ||
+            e.target.closest('.theater-controls-bar')) {
+          return;
+        }
         e.preventDefault();
         const delta = e.deltaY < 0 ? 0.05 : -0.05;
         this.adjustVolume(delta);
@@ -419,6 +430,38 @@ class PlayerController {
       });
     }
 
+    // Dedicated Mouse Wheel Handler on Channel Surf Drawer (Watch Live bottom section)
+    const surfDrawer = document.getElementById('theater-surf-drawer');
+    const surfList = document.getElementById('theater-surf-list');
+    if (surfDrawer && surfList && !surfDrawer._hasWheelInit) {
+      surfDrawer._hasWheelInit = true;
+      surfDrawer.addEventListener('wheel', (e) => {
+        const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        if (!delta) return;
+        e.stopPropagation();
+        
+        // If cursor is over category pills and pills overflow, scroll pills
+        const catsEl = document.getElementById('theater-surf-cats');
+        if (e.target.closest('#theater-surf-cats') && catsEl && catsEl.scrollWidth > catsEl.clientWidth) {
+          const canPillLeft = catsEl.scrollLeft > 0;
+          const canPillRight = catsEl.scrollLeft < (catsEl.scrollWidth - catsEl.clientWidth - 2);
+          if ((delta < 0 && canPillLeft) || (delta > 0 && canPillRight)) {
+            e.preventDefault();
+            catsEl.scrollLeft += delta * 1.1;
+            return;
+          }
+        }
+
+        // Scroll the channel cards list horizontally
+        const canScrollLeft = surfList.scrollLeft > 0;
+        const canScrollRight = surfList.scrollLeft < (surfList.scrollWidth - surfList.clientWidth - 2);
+        if ((delta < 0 && canScrollLeft) || (delta > 0 && canScrollRight)) {
+          e.preventDefault();
+          surfList.scrollLeft += delta * 1.25;
+        }
+      }, { passive: false });
+    }
+
     // In-Player Pop-from-Left TV Guide Drawer Toggle Button
     const sideGuideBtn = document.getElementById('theater-guide-toggle-btn');
     if (sideGuideBtn) {
@@ -463,19 +506,33 @@ class PlayerController {
       }
     }, 1000);
 
-    // Auto-hide controls when user is idle during playback
-    const resetControlsTimer = () => {
+    // Auto-hide controls when user is not hovering on the bottom section during playback
+    const resetControlsTimer = (delay = 3000) => {
       if (!this.isOpen || !this.modalContainer) return;
       this.modalContainer.classList.remove('controls-hidden');
       if (this.controlsHideTimer) clearTimeout(this.controlsHideTimer);
 
       this.controlsHideTimer = setTimeout(() => {
         if (!this.isOpen || !this.modalContainer) return;
-        const drawer = document.getElementById('theater-surf-drawer');
-        const isDrawerOpen = drawer && !drawer.classList.contains('collapsed');
+
+        // Never auto-hide while mouse is hovering directly on the bottom section
+        if (this.isHoveringBottomSection) return;
+
+        const bottomEl = document.getElementById('theater-bottom-overlay');
+        if (bottomEl && bottomEl.matches(':hover')) {
+          this.isHoveringBottomSection = true;
+          return;
+        }
+
+        const searchInput = document.getElementById('theater-surf-search');
+        const isSearchFocused = searchInput && document.activeElement === searchInput;
         const popmenu = document.getElementById('theater-popmenu-wrapper');
         const isPopmenuOpen = popmenu && popmenu.classList.contains('open');
         const isSideGuideOpen = this.isSideGuideOpen;
+
+        if (isSearchFocused || isPopmenuOpen || isSideGuideOpen) {
+          return;
+        }
 
         // Never auto-hide controls during iframe / mirror playback (e.g. Channel 5)
         const isIframeActive = this.modalContainer.classList.contains('has-iframe-active') ||
@@ -483,39 +540,49 @@ class PlayerController {
                                this.engineMode === 'mirror' || 
                                this.engineMode === 'embed';
 
-        // Keep bottom controls permanently visible in standard windowed theater mode
-        const isFs = !!(
-          document.fullscreenElement || 
-          document.webkitFullscreenElement ||
-          document.mozFullScreenElement ||
-          document.msFullscreenElement ||
-          this.modalContainer?.classList.contains('is-fullscreen')
-        );
-
-        if (isIframeActive || !isFs) {
+        if (isIframeActive) {
           this.modalContainer.classList.remove('controls-hidden');
           return;
         }
 
-        if (!isDrawerOpen && !isPopmenuOpen && !isSideGuideOpen) {
-          this.modalContainer.classList.add('controls-hidden');
-        }
-      }, 3500);
+        this.modalContainer.classList.add('controls-hidden');
+      }, delay);
     };
+    this.resetControlsTimer = resetControlsTimer;
 
     if (this.modalContainer) {
-      this.modalContainer.addEventListener('mousemove', resetControlsTimer);
-      this.modalContainer.addEventListener('mousedown', resetControlsTimer);
+      this.modalContainer.addEventListener('mousemove', (e) => {
+        if (this.isHoveringBottomSection) {
+          this.modalContainer.classList.remove('controls-hidden');
+          return;
+        }
+        resetControlsTimer(3000);
+      });
+      this.modalContainer.addEventListener('mousedown', () => resetControlsTimer(3000));
+      this.modalContainer.addEventListener('mouseleave', () => {
+        if (!this.isHoveringBottomSection) {
+          resetControlsTimer(1000);
+        }
+      });
     }
 
     const bottomOverlay = document.getElementById('theater-bottom-overlay') || document.getElementById('theater-controls-bar');
     if (bottomOverlay) {
       bottomOverlay.addEventListener('mouseenter', () => {
         if (!this.isOpen || !this.modalContainer) return;
+        this.isHoveringBottomSection = true;
         this.modalContainer.classList.remove('controls-hidden');
         if (this.controlsHideTimer) clearTimeout(this.controlsHideTimer);
       });
-      bottomOverlay.addEventListener('mouseleave', resetControlsTimer);
+      bottomOverlay.addEventListener('mousemove', () => {
+        this.isHoveringBottomSection = true;
+        if (this.modalContainer) this.modalContainer.classList.remove('controls-hidden');
+        if (this.controlsHideTimer) clearTimeout(this.controlsHideTimer);
+      });
+      bottomOverlay.addEventListener('mouseleave', () => {
+        this.isHoveringBottomSection = false;
+        resetControlsTimer(2500);
+      });
     }
 
     const header = this.modalContainer ? this.modalContainer.querySelector('.theater-header') : null;
@@ -525,7 +592,7 @@ class PlayerController {
         this.modalContainer.classList.remove('controls-hidden');
         if (this.controlsHideTimer) clearTimeout(this.controlsHideTimer);
       });
-      header.addEventListener('mouseleave', resetControlsTimer);
+      header.addEventListener('mouseleave', () => resetControlsTimer(3000));
     }
 
     // Keyboard controls
@@ -1127,6 +1194,32 @@ class PlayerController {
         `;
       }
     }
+    // Watch Channel 4 Live direct header button
+    const c4LiveBtn = document.getElementById('theater-c4-live-btn');
+    const c4LiveLabel = document.getElementById('theater-c4-live-label');
+    const isC4Family = channel.id && (channel.id.startsWith('channel4') || channel.id.startsWith('e4') || channel.id.startsWith('more4') || channel.id.startsWith('4seven'));
+    if (c4LiveBtn) {
+      if (isC4Family) {
+        c4LiveBtn.style.display = 'inline-flex';
+        let targetC4Url = 'https://www.channel4.com/now/C4';
+        let targetLabel = 'Watch Channel 4 Live';
+        if (channel.id.startsWith('e4')) {
+          targetC4Url = 'https://www.channel4.com/now/E4';
+          targetLabel = 'Watch E4 Live';
+        } else if (channel.id.startsWith('more4')) {
+          targetC4Url = 'https://www.channel4.com/now/M4';
+          targetLabel = 'Watch More4 Live';
+        } else if (channel.id.startsWith('4seven')) {
+          targetC4Url = 'https://www.channel4.com/now/4S';
+          targetLabel = 'Watch 4seven Live';
+        }
+        c4LiveBtn.href = targetC4Url;
+        if (c4LiveLabel) c4LiveLabel.textContent = targetLabel;
+      } else {
+        c4LiveBtn.style.display = 'none';
+      }
+    }
+
     this.updateTheaterViewerCount(channel);
     this.updatePlayerFavState();
     this.updatePlayerEPGTicker(channel.id);
@@ -1150,9 +1243,13 @@ class PlayerController {
     // Show Broadcast Channel OSD HUD
     this.showChannelOSD(channel);
 
-    // Reset controls visibility
+    // Reset controls visibility and arm auto-hide timer for idle viewing
+    this.isHoveringBottomSection = false;
     if (this.modalContainer) {
       this.modalContainer.classList.remove('controls-hidden');
+    }
+    if (typeof this.resetControlsTimer === 'function') {
+      this.resetControlsTimer(3500);
     }
 
     // Populate in-player channel switcher and ensure bottom surf drawer is open
@@ -2233,9 +2330,32 @@ class PlayerController {
 
   openInNewWindow() {
     if (!this.currentChannel) return;
-    const targetUrl = this.fallbackEmbedUrl || (this.currentChannel && this.currentChannel.iframeUrl) || `/api/stream?channel=${this.currentChannel.id}`;
-    window.open(targetUrl, '_blank', 'width=1020,height=620,scrollbars=no,resizable=yes');
-    window.showToast(`Opened ${this.currentChannel.name} in pop-out window ↗`, 'info');
+    const ch = this.currentChannel;
+    let targetUrl = '';
+    
+    // Official broadcaster feeds
+    if (ch.id === 'channel4' || ch.id === 'channel4-uk') {
+      targetUrl = 'https://www.channel4.com/now/C4';
+    } else if (ch.id.startsWith('e4')) {
+      targetUrl = 'https://www.channel4.com/now/E4';
+    } else if (ch.id.startsWith('more4')) {
+      targetUrl = 'https://www.channel4.com/now/M4';
+    } else if (ch.id.startsWith('4seven')) {
+      targetUrl = 'https://www.channel4.com/now/4S';
+    } else if (ch.id.startsWith('channel5')) {
+      targetUrl = 'https://www.channel5.com/channels/5#state=5';
+    } else if (ch.iframeUrl && !ch.iframeUrl.includes('freeshot.live')) {
+      targetUrl = ch.iframeUrl;
+    } else {
+      // Pure ad-free IVTV standalone pop-out window
+      targetUrl = `/?play=${encodeURIComponent(ch.id)}&popout=1`;
+    }
+
+    const popupName = `IVTV_${ch.id.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    window.open(targetUrl, popupName, 'width=1020,height=600,scrollbars=no,resizable=yes');
+    if (window.showToast) {
+      window.showToast(`Opened ${ch.name} in pop-out window ↗`, 'info');
+    }
   }
 
   togglePlayerFavorite() {
@@ -2374,70 +2494,117 @@ class PlayerController {
   }
 
   async togglePiP() {
-    if (!this.video) return;
+    if (!this.isOpen || !this.currentChannel) return;
 
-    // If currently in mirror/iframe mode, standard HTML5 video PiP cannot detach cross-origin iframes
-    if (this.engineMode === 'mirror' || (this.youtubeIframe && this.youtubeIframe.style.display !== 'none')) {
-      if (window.showToast) {
-        window.showToast('Picture-in-Picture switching to Direct HD...', 'info');
+    // 1. If currently in PiP, exit cleanly
+    if (document.pictureInPictureElement || this.isPiPActive || this.pipWindow) {
+      if (document.pictureInPictureElement) {
+        try {
+          await document.exitPictureInPicture();
+        } catch (e) {}
+      } else if (this.video && this.video.webkitPresentationMode === 'picture-in-picture') {
+        this.video.webkitSetPresentationMode('inline');
+      } else if (this.pipWindow) {
+        try {
+          this.pipWindow.close();
+        } catch (e) {}
+        this.pipWindow = null;
       }
-      this.toggleEngine();
-      setTimeout(() => this.togglePiP(), 800);
+      this.onLeavePiP();
       return;
     }
 
-    try {
-      // Check if already in PiP
-      if (document.pictureInPictureElement || this.isPiPActive) {
-        if (document.pictureInPictureElement) {
-          await document.exitPictureInPicture();
-        } else if (this.video.webkitPresentationMode === 'picture-in-picture') {
-          this.video.webkitSetPresentationMode('inline');
+    const isIframe = this.engineMode === 'mirror' || 
+                     this.engineMode === 'embed' || 
+                     (this.youtubeIframe && this.youtubeIframe.style.display !== 'none');
+
+    // 2. Handle Iframe / Embed channels via Document PiP or clean detached window
+    if (isIframe) {
+      if (window.documentPictureInPicture && typeof window.documentPictureInPicture.requestWindow === 'function') {
+        try {
+          const pipWin = await window.documentPictureInPicture.requestWindow({ width: 640, height: 380 });
+          this.pipWindow = pipWin;
+          this.setupDocumentPiP(pipWin);
+          this.onEnterPiP();
+          return;
+        } catch (e) {
+          console.warn('[IVTV Player] Document PiP request failed:', e);
         }
-        this.onLeavePiP();
+      }
+      this.openInNewWindow();
+      return;
+    }
+
+    // 3. Handle Standard HTML5 Video Stream
+    try {
+      if (this.video && this.video.requestPictureInPicture) {
+        await this.video.requestPictureInPicture();
+        this.onEnterPiP();
         return;
       }
-
-      // Check browser support for standard or WebKit presentation mode
-      if (!document.pictureInPictureEnabled && typeof this.video.webkitSetPresentationMode !== 'function') {
-        window.showToast?.('Picture-in-Picture not supported in this browser', 'warning');
+      if (this.video && typeof this.video.webkitSetPresentationMode === 'function') {
+        this.video.webkitSetPresentationMode('picture-in-picture');
+        this.onEnterPiP();
         return;
       }
-
-      // If video metadata isn't ready yet, defer until loaded
-      if (this.video.readyState < 1) {
-        window.showToast?.('Buffering stream for Picture-in-Picture...', 'info');
-        const onLoaded = async () => {
-          this.video.removeEventListener('loadedmetadata', onLoaded);
-          try {
-            await this.requestNativePiP();
-          } catch (e) {
-            console.warn('[IVTV Player] Deferred PiP request failed:', e);
-          }
-        };
-        this.video.addEventListener('loadedmetadata', onLoaded, { once: true });
+      if (window.documentPictureInPicture && typeof window.documentPictureInPicture.requestWindow === 'function') {
+        const pipWin = await window.documentPictureInPicture.requestWindow({ width: 640, height: 380 });
+        this.pipWindow = pipWin;
+        this.setupDocumentPiP(pipWin);
+        this.onEnterPiP();
         return;
       }
-
-      await this.requestNativePiP();
+      this.openInNewWindow();
     } catch (err) {
-      console.warn('[IVTV Player] PiP error:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
-        window.showToast?.('Click the player screen once, then retry Picture-in-Picture', 'warning');
-      } else {
-        window.showToast?.('Picture-in-Picture: ' + (err.message || 'Stream initializing, please retry'), 'warning');
+      console.warn('[IVTV Player] Native PiP error, falling back to windowed PiP:', err);
+      if (window.documentPictureInPicture && typeof window.documentPictureInPicture.requestWindow === 'function') {
+        try {
+          const pipWin = await window.documentPictureInPicture.requestWindow({ width: 640, height: 380 });
+          this.pipWindow = pipWin;
+          this.setupDocumentPiP(pipWin);
+          this.onEnterPiP();
+          return;
+        } catch (e) {}
       }
+      this.openInNewWindow();
     }
   }
 
-  async requestNativePiP() {
-    if (this.video.webkitSetPresentationMode && typeof this.video.webkitSetPresentationMode === 'function') {
-      this.video.webkitSetPresentationMode('picture-in-picture');
-      this.onEnterPiP();
-    } else if (this.video.requestPictureInPicture) {
-      await this.video.requestPictureInPicture();
-      this.onEnterPiP();
+  setupDocumentPiP(pipWin) {
+    if (!pipWin) return;
+    const chName = this.currentChannel ? this.currentChannel.name : 'Live TV';
+    pipWin.document.title = `${chName} — IVTV Floating Player`;
+
+    document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+      pipWin.document.head.appendChild(link.cloneNode(true));
+    });
+
+    const style = pipWin.document.createElement('style');
+    style.textContent = `
+      body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+      video, iframe { width: 100%; height: 100%; border: 0; object-fit: contain; }
+    `;
+    pipWin.document.head.appendChild(style);
+
+    if (this.youtubeIframe && this.youtubeIframe.style.display !== 'none' && this.youtubeIframe.src) {
+      const clonedIframe = pipWin.document.createElement('iframe');
+      clonedIframe.src = this.youtubeIframe.src;
+      clonedIframe.allow = 'autoplay; encrypted-media; fullscreen';
+      clonedIframe.style.width = '100%';
+      clonedIframe.style.height = '100%';
+      clonedIframe.style.border = '0';
+      pipWin.document.body.appendChild(clonedIframe);
+    } else if (this.video) {
+      pipWin.document.body.appendChild(this.video);
     }
+
+    pipWin.addEventListener('pagehide', () => {
+      if (this.screenArea && this.video && !this.screenArea.contains(this.video)) {
+        this.screenArea.appendChild(this.video);
+      }
+      this.pipWindow = null;
+      this.onLeavePiP();
+    });
   }
 
   onEnterPiP() {
@@ -2661,6 +2828,8 @@ class PlayerController {
     // Enable horizontal scroll and drag on the surf drawer track
     if (window.enableHorizontalScrollAndDrag) {
       window.enableHorizontalScrollAndDrag(surfTrack);
+    } else if (window.UIControllerInstance && typeof window.UIControllerInstance.enableHorizontalScrollAndDrag === 'function') {
+      window.UIControllerInstance.enableHorizontalScrollAndDrag(surfTrack);
     }
   }
 }
