@@ -158,6 +158,15 @@ class PlayerController {
           }
         }
       });
+
+      // Picture-in-Picture event listeners for seamless sync
+      this.video.addEventListener('enterpictureinpicture', () => {
+        this.onEnterPiP();
+      });
+
+      this.video.addEventListener('leavepictureinpicture', () => {
+        this.onLeavePiP();
+      });
     }
 
     // Stream Engine Toggle Button
@@ -256,6 +265,26 @@ class PlayerController {
       });
     }
 
+    // Dedicated Picture-in-Picture Button on Controls Bar
+    const directPipBtn = document.getElementById('theater-direct-pip-btn');
+    if (directPipBtn) {
+      directPipBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.togglePiP();
+      });
+    }
+
+    // Header Picture-in-Picture Button (next to Close button)
+    const headerPipBtn = document.getElementById('theater-header-pip-btn');
+    if (headerPipBtn) {
+      headerPipBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.togglePiP();
+      });
+    }
+
     // Picture-in-Picture Button (inside popmenu)
     const pipBtn = document.getElementById('theater-pip-btn');
     if (pipBtn) {
@@ -266,6 +295,12 @@ class PlayerController {
         }
         this.togglePiP();
       });
+    }
+
+    // Floating PiP Restore Pill Click (restores player modal)
+    const pipRestorePill = document.getElementById('theater-pip-restore-pill');
+    if (pipRestorePill) {
+      pipRestorePill.addEventListener('click', () => this.restoreFromPiP());
     }
 
     // Favorite toggle button inside player
@@ -1066,11 +1101,32 @@ class PlayerController {
       window.ivtvStorage.addToRecent(channel.id);
     }
 
-    // Update Player UI details
+    // Update Player UI details (with robust local logo support & fallback)
     const chNumStr = channel.chNumber ? ` • CH ${channel.chNumber}` : '';
-    const logoSrc = channel.logo || channel.logoUrl || '';
-    const logoTag = logoSrc ? `<img src="${logoSrc}" class="theater-channel-logo" alt="${channel.name}">` : '';
+    const logoSrc = channel.logo || (channel.slug ? `assets/logos/${channel.slug}.png` : '') || channel.logoUrl || '';
+    const fallbackDomain = window.IVTV_US_TV_LOGO_FALLBACK_DOMAINS?.[channel.id || channel.slug];
+    const fallbackUrl = fallbackDomain
+      ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${fallbackDomain}&size=128`
+      : '';
+    const logoTag = logoSrc
+      ? `<img src="${logoSrc}" class="theater-channel-logo" alt="${channel.name}" data-fallback-src="${fallbackUrl}" onerror="if(this.dataset.fallbackSrc && !this.dataset.fallback){this.dataset.fallback='1';this.src=this.dataset.fallbackSrc;}else{this.style.display='none';}">`
+      : '';
     document.getElementById('theater-channel-title').innerHTML = `${logoTag}<span>${channel.name}${chNumStr}</span>`;
+
+    // Top-left status badges: show prominent USTV badge for U.S. TV channels
+    const statusBadges = document.querySelector('.theater-status-badges');
+    if (statusBadges) {
+      if (channel.category === 'US TV') {
+        statusBadges.innerHTML = `
+          <span class="theater-us-pill" title="United States Television Network"><span class="us-flag-icon">🇺🇸</span> USTV</span>
+          <span class="theater-live-pill"><span class="live-pulse-dot" style="width:6px;height:6px;"></span> LIVE HD</span>
+        `;
+      } else {
+        statusBadges.innerHTML = `
+          <span class="theater-live-pill"><span class="live-pulse-dot" style="width:6px;height:6px;"></span> LIVE</span>
+        `;
+      }
+    }
     this.updateTheaterViewerCount(channel);
     this.updatePlayerFavState();
     this.updatePlayerEPGTicker(channel.id);
@@ -1244,6 +1300,10 @@ class PlayerController {
       return;
     }
 
+    // Reset US backup failover state
+    this.hasTriedBackup = false;
+    this.backupStreamUrl = '';
+
     // Direct HD Native Video + Hls.js Mode
     this.setEngineUI('direct', 'Direct HD');
     if (this.modalContainer) {
@@ -1252,20 +1312,35 @@ class PlayerController {
     if (this.youtubeIframe) {
       this.youtubeIframe.src = '';
       this.youtubeIframe.style.display = 'none';
-      this.youtubeIframe.classList.remove('crop-channel5-nav');
+      this.youtubeIframe.classList.remove('crop-channel5-nav', 'crop-channel4-nav');
     }
     if (this.video) {
       this.video.style.display = 'block';
       this.video.currentTime = 0;
     }
 
-    // Set 6.5-second Black Screen Watchdog: If no video frames arrive or stream is stalled, auto-switch to mirror
+    // Set 6.5-second Black Screen Watchdog: If no video frames arrive or stream is stalled, auto-switch to backup or mirror
     this.watchdogTimer = setTimeout(() => {
       if (this.isOpen && this.engineMode === 'direct') {
         const isActuallyRendering = this.video && !this.video.paused && this.video.videoWidth > 0 && this.video.currentTime > 0.1;
         if (!isActuallyRendering) {
           console.warn('[IVTV Player] Black screen / stalled stream detected by 6.5s watchdog.');
           const ch = this.currentChannel;
+          const isUs = ch && ch.category === 'US TV';
+
+          // For US channels, attempt backup server stream first
+          if (isUs && this.backupStreamUrl && !this.hasTriedBackup && this.hls) {
+            console.log('[IVTV Player] Watchdog: Trying US Backup Server stream first...');
+            this.hasTriedBackup = true;
+            window.showToast('Switching to US Backup Server ⚡', 'info');
+            const resolvedBackup = (typeof this.backupStreamUrl === 'string' && this.backupStreamUrl.startsWith('/'))
+              ? (window.location.origin + this.backupStreamUrl)
+              : this.backupStreamUrl;
+            this.hls.loadSource(resolvedBackup);
+            this.hls.startLoad();
+            return;
+          }
+
           const fallback = this.fallbackEmbedUrl || (ch && ch.iframeUrl);
           console.log('[IVTV Player] Watchdog: Auto-recovering via Mirror Player.');
           window.showToast('Stream recovered via Mirror Player ⚡', 'info');
@@ -1290,7 +1365,7 @@ class PlayerController {
           this.video.style.display = 'none';
         }
         if (this.youtubeIframe) {
-          this.youtubeIframe.classList.remove('crop-channel5-nav');
+          this.youtubeIframe.classList.remove('crop-channel5-nav', 'crop-channel4-nav');
           this.youtubeIframe.style.display = 'block';
           this.youtubeIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-forms allow-fullscreen');
           this.youtubeIframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
@@ -1304,6 +1379,12 @@ class PlayerController {
       }
 
       if (data && data.success && (data.type === 'iframe' || data.type === 'embed') && data.streamUrl) {
+        if (this.watchdogTimer) {
+          clearTimeout(this.watchdogTimer);
+          this.watchdogTimer = null;
+        }
+        this.engineMode = 'embed';
+        this.fallbackEmbedUrl = data.fallbackEmbedUrl || '';
         this.setEngineUI('embed', 'Official Player');
         if (this.video) {
           this.video.pause();
@@ -1315,7 +1396,8 @@ class PlayerController {
 
       if (data && data.success && (data.type === 'hls' || data.type === 'hls-proxy') && data.streamUrl) {
         this.fallbackEmbedUrl = data.fallbackEmbedUrl || '';
-        this.initHlsStream(data.streamUrl, data.channelSlug, data.currentToken, data.fallbackEmbedUrl);
+        this.backupStreamUrl = data.backupStreamUrl || '';
+        this.initHlsStream(data.streamUrl, data.channelSlug, data.currentToken, data.fallbackEmbedUrl, data.backupStreamUrl);
       } else if (data && data.fallbackEmbedUrl) {
         console.log('[IVTV Player] Direct HLS unavailable, auto-switching to Mirror Player.');
         this.loadEmbedMirror(channelId, data.fallbackEmbedUrl);
@@ -1332,21 +1414,48 @@ class PlayerController {
     }
   }
 
-  initHlsStream(streamUrl, slug, token, fallbackEmbedUrl) {
+  initHlsStream(streamUrl, slug, token, fallbackEmbedUrl, backupStreamUrl = '') {
     if (!this.video) return;
 
     const resolvedUrl = (typeof streamUrl === 'string' && streamUrl.startsWith('/'))
       ? (window.location.origin + streamUrl)
       : streamUrl;
 
+    const isUsChannel = this.currentChannel?.category === 'US TV';
+
     if (window.Hls && Hls.isSupported()) {
-      this.hls = new Hls({
+      // Tuned buffer settings for smooth US channel playback across CDN connections
+      const hlsConfig = isUsChannel ? {
         enableWorker: true,
         lowLatencyMode: false,
-        backBufferLength: 30, // Prune segments >30s behind playhead to eliminate RAM bloat and QuotaExceededError
-        maxBufferLength: 20, // 20s forward buffer prevents starvation while conserving memory
+        backBufferLength: 30, // Prune segments >30s behind playhead to keep RAM optimal
+        maxBufferLength: 30,  // Deep 30s forward buffer eliminates buffering & stuttering
+        maxMaxBufferLength: 60,
+        maxBufferSize: 60 * 1000 * 1000, // 60MB SourceBuffer limit
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 8,
+        liveDurationInfinity: true,
+        maxBufferHole: 0.8,
+        highBufferWatchdogPeriod: 2,
+        nudgeOffset: 0.3,
+        nudgeMaxRetry: 10,
+        enableSoftwareAES: true,
+        manifestLoadingTimeOut: 12000,
+        manifestLoadingMaxRetry: 5,
+        manifestLoadingRetryDelay: 1000,
+        levelLoadingTimeOut: 12000,
+        levelLoadingMaxRetry: 5,
+        levelLoadingRetryDelay: 1000,
+        fragLoadingTimeOut: 20000,
+        fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 1000
+      } : {
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 30,
+        maxBufferLength: 20,
         maxMaxBufferLength: 30,
-        maxBufferSize: 30 * 1000 * 1000, // 30MB SourceBuffer limit
+        maxBufferSize: 30 * 1000 * 1000,
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 10,
         liveDurationInfinity: true,
@@ -1364,7 +1473,9 @@ class PlayerController {
         fragLoadingTimeOut: 15000,
         fragLoadingMaxRetry: 5,
         fragLoadingRetryDelay: 1000
-      });
+      };
+
+      this.hls = new Hls(hlsConfig);
 
       this.hls.loadSource(resolvedUrl);
       this.hls.attachMedia(this.video);
@@ -1423,6 +1534,15 @@ class PlayerController {
         startPlayback();
       });
 
+      this.hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (event, data) => {
+        if (data && data.audioTracks && data.audioTracks.length > 0) {
+          if (this.hls && (this.hls.audioTrack === -1 || this.hls.audioTrack === undefined)) {
+            console.log('[IVTV Player] Ensuring primary audio track is active (track 0)');
+            try { this.hls.audioTrack = 0; } catch (e) { }
+          }
+        }
+      });
+
       this.hls.on(Hls.Events.BUFFER_APPENDED, () => {
         // One-time seek past dead zero timestamp if live stream buffer starts ahead
         if (this.video && this.video.buffered && this.video.buffered.length > 0) {
@@ -1449,6 +1569,19 @@ class PlayerController {
             [403, 404, 410].includes(data.response.code));
 
         if (isForbiddenStream) {
+          // If this is a US channel and backup stream is available, auto-failover to backup first
+          if (isUsChannel && backupStreamUrl && !this.hasTriedBackup) {
+            console.warn('[IVTV Player] Primary US Stream returned HTTP error, auto-failing over to Backup Server.');
+            this.hasTriedBackup = true;
+            window.showToast?.('Primary busy, switching to US Backup Server ⚡', 'info');
+            const resolvedBackup = (typeof backupStreamUrl === 'string' && backupStreamUrl.startsWith('/'))
+              ? (window.location.origin + backupStreamUrl)
+              : backupStreamUrl;
+            this.hls.loadSource(resolvedBackup);
+            this.hls.startLoad();
+            return;
+          }
+
           console.warn('[IVTV Player] Upstream HLS media rejected or expired, switching to Mirror Player.');
           const ch = this.currentChannel;
           const fallback = fallbackEmbedUrl || (ch && ch.iframeUrl);
@@ -1483,6 +1616,19 @@ class PlayerController {
             this.hls.startLoad();
           }
 
+          // If US channel stalls 3+ times, auto-switch to backup server before iframe fallback
+          if (this.consecutiveStallCount >= 3 && isUsChannel && backupStreamUrl && !this.hasTriedBackup) {
+            console.warn('[IVTV Player] US Channel stall threshold reached, auto-switching to Backup Server.');
+            this.hasTriedBackup = true;
+            window.showToast?.('Switched to US Backup Stream ⚡', 'info');
+            const resolvedBackup = (typeof backupStreamUrl === 'string' && backupStreamUrl.startsWith('/'))
+              ? (window.location.origin + backupStreamUrl)
+              : backupStreamUrl;
+            this.hls.loadSource(resolvedBackup);
+            this.hls.startLoad();
+            return;
+          }
+
           // Only switch to Mirror Player if stalls persist repeatedly for >= 5 cycles within a short window
           if (this.consecutiveStallCount >= 5) {
             const ch = this.currentChannel;
@@ -1514,6 +1660,18 @@ class PlayerController {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (!navigator.onLine) {
                 this.showOfflineOverlay();
+                return;
+              }
+              // For US channels, attempt backup server stream on network error
+              if (isUsChannel && backupStreamUrl && !this.hasTriedBackup) {
+                console.warn('[IVTV Player] US Channel network error, switching to Backup Server.');
+                this.hasTriedBackup = true;
+                window.showToast?.('Switched to US Backup Stream ⚡', 'info');
+                const resolvedBackup = (typeof backupStreamUrl === 'string' && backupStreamUrl.startsWith('/'))
+                  ? (window.location.origin + backupStreamUrl)
+                  : backupStreamUrl;
+                this.hls.loadSource(resolvedBackup);
+                this.hls.startLoad();
                 return;
               }
               if (this.fatalErrorCount >= 3) {
@@ -1616,6 +1774,9 @@ class PlayerController {
                        channelId === 'channel5-uk' || 
                        (embedUrl && embedUrl.includes('channel5.com'));
 
+    const isChannel4 = (channelId && (channelId.startsWith('channel4') || channelId.startsWith('e4') || channelId.startsWith('more4') || channelId.startsWith('4seven') || channelId.startsWith('film4'))) && 
+                       (embedUrl && embedUrl.includes('channel4.com'));
+
     if (this.modalContainer) {
       this.modalContainer.classList.add('has-iframe-active');
       this.modalContainer.classList.remove('controls-hidden');
@@ -1624,7 +1785,12 @@ class PlayerController {
     if (this.youtubeIframe) {
       this.youtubeIframe.style.display = 'block';
       this.youtubeIframe.classList.toggle('crop-channel5-nav', Boolean(isChannel5));
-      this.youtubeIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-forms allow-fullscreen allow-popups');
+      this.youtubeIframe.classList.toggle('crop-channel4-nav', Boolean(isChannel4));
+      if (isChannel5 || isChannel4) {
+        this.youtubeIframe.removeAttribute('sandbox');
+      } else {
+        this.youtubeIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-forms allow-fullscreen allow-popups allow-modals allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation');
+      }
       this.youtubeIframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
       this.youtubeIframe.setAttribute('allowfullscreen', 'true');
       this.youtubeIframe.src = embedUrl;
@@ -1879,6 +2045,18 @@ class PlayerController {
       this.toggleSideGuide(false);
     }
 
+    // If in PiP, exit PiP and cleanup restore pill
+    if (document.pictureInPictureElement) {
+      try {
+        document.exitPictureInPicture().catch(() => {});
+      } catch (e) {}
+    }
+    this.isPiPActive = false;
+    this.updatePiPButtonState(false);
+    if (this.modal) this.modal.classList.remove('in-pip-mode');
+    const pill = document.getElementById('theater-pip-restore-pill');
+    if (pill) pill.style.display = 'none';
+
     // Exit fullscreen if active
     const isNativeFs = !!(
       document.fullscreenElement ||
@@ -1918,7 +2096,7 @@ class PlayerController {
     }
     if (this.youtubeIframe) {
       this.youtubeIframe.src = '';
-      this.youtubeIframe.classList.remove('crop-channel5-nav');
+      this.youtubeIframe.classList.remove('crop-channel5-nav', 'crop-channel4-nav');
     }
     this.hideUnmuteBadge();
     if (this.errorOverlay) {
@@ -2110,10 +2288,23 @@ class PlayerController {
     const progTitle = document.getElementById('osd-program-title');
     const progTime = document.getElementById('osd-program-time');
 
-    const logoSrc = channel.logo || channel.logoUrl || '';
+    const logoSrc = channel.logo || (channel.slug ? `assets/logos/${channel.slug}.png` : '') || channel.logoUrl || '';
     if (logoImg) {
       logoImg.src = logoSrc;
       logoImg.style.display = logoSrc ? 'block' : 'none';
+      const fallbackDomain = window.IVTV_US_TV_LOGO_FALLBACK_DOMAINS?.[channel.id || channel.slug];
+      const fallbackUrl = fallbackDomain
+        ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${fallbackDomain}&size=128`
+        : '';
+      logoImg.dataset.fallbackSrc = fallbackUrl;
+      logoImg.onerror = function() {
+        if (this.dataset.fallbackSrc && !this.dataset.fallback) {
+          this.dataset.fallback = '1';
+          this.src = this.dataset.fallbackSrc;
+        } else {
+          this.style.display = 'none';
+        }
+      };
     }
     if (chNum) chNum.textContent = channel.chNumber ? `CH ${channel.chNumber}` : `CH 00`;
     if (chName) chName.textContent = channel.name;
@@ -2184,18 +2375,142 @@ class PlayerController {
 
   async togglePiP() {
     if (!this.video) return;
-    try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else if (document.pictureInPictureEnabled) {
-        await this.video.requestPictureInPicture();
-        window.showToast('Picture-in-Picture active', 'info');
-      } else {
-        window.showToast('Picture-in-Picture not supported in this browser', 'info');
+
+    // If currently in mirror/iframe mode, standard HTML5 video PiP cannot detach cross-origin iframes
+    if (this.engineMode === 'mirror' || (this.youtubeIframe && this.youtubeIframe.style.display !== 'none')) {
+      if (window.showToast) {
+        window.showToast('Picture-in-Picture switching to Direct HD...', 'info');
       }
-    } catch (err) {
-      console.warn('PiP error:', err);
+      this.toggleEngine();
+      setTimeout(() => this.togglePiP(), 800);
+      return;
     }
+
+    try {
+      // Check if already in PiP
+      if (document.pictureInPictureElement || this.isPiPActive) {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if (this.video.webkitPresentationMode === 'picture-in-picture') {
+          this.video.webkitSetPresentationMode('inline');
+        }
+        this.onLeavePiP();
+        return;
+      }
+
+      // Check browser support for standard or WebKit presentation mode
+      if (!document.pictureInPictureEnabled && typeof this.video.webkitSetPresentationMode !== 'function') {
+        window.showToast?.('Picture-in-Picture not supported in this browser', 'warning');
+        return;
+      }
+
+      // If video metadata isn't ready yet, defer until loaded
+      if (this.video.readyState < 1) {
+        window.showToast?.('Buffering stream for Picture-in-Picture...', 'info');
+        const onLoaded = async () => {
+          this.video.removeEventListener('loadedmetadata', onLoaded);
+          try {
+            await this.requestNativePiP();
+          } catch (e) {
+            console.warn('[IVTV Player] Deferred PiP request failed:', e);
+          }
+        };
+        this.video.addEventListener('loadedmetadata', onLoaded, { once: true });
+        return;
+      }
+
+      await this.requestNativePiP();
+    } catch (err) {
+      console.warn('[IVTV Player] PiP error:', err);
+      if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+        window.showToast?.('Click the player screen once, then retry Picture-in-Picture', 'warning');
+      } else {
+        window.showToast?.('Picture-in-Picture: ' + (err.message || 'Stream initializing, please retry'), 'warning');
+      }
+    }
+  }
+
+  async requestNativePiP() {
+    if (this.video.webkitSetPresentationMode && typeof this.video.webkitSetPresentationMode === 'function') {
+      this.video.webkitSetPresentationMode('picture-in-picture');
+      this.onEnterPiP();
+    } else if (this.video.requestPictureInPicture) {
+      await this.video.requestPictureInPicture();
+      this.onEnterPiP();
+    }
+  }
+
+  onEnterPiP() {
+    this.isPiPActive = true;
+    if (window.showToast) {
+      window.showToast('Picture-in-Picture Active 📺 (Player minimized)', 'success');
+    }
+    // Update active states on PiP buttons
+    this.updatePiPButtonState(true);
+
+    // Minimize modal overlay so the user can interact freely with IVTV website
+    if (this.modal) {
+      this.modal.classList.add('in-pip-mode');
+    }
+    document.body.classList.remove('theater-active');
+    document.body.style.overflow = '';
+
+    // Show restore pill at bottom right
+    const pill = document.getElementById('theater-pip-restore-pill');
+    if (pill) {
+      const channelName = this.currentChannel ? this.currentChannel.name : 'Live Stream';
+      const textElem = document.getElementById('theater-pip-restore-text');
+      if (textElem) {
+        textElem.textContent = `Playing ${channelName} in PiP`;
+      }
+      pill.style.display = 'inline-flex';
+    }
+  }
+
+  onLeavePiP() {
+    this.isPiPActive = false;
+    this.updatePiPButtonState(false);
+
+    // Hide restore pill
+    const pill = document.getElementById('theater-pip-restore-pill');
+    if (pill) {
+      pill.style.display = 'none';
+    }
+
+    // If player is still open, restore theater modal overlay
+    if (this.isOpen && this.modal) {
+      this.modal.classList.remove('in-pip-mode');
+      document.body.classList.add('theater-active');
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  restoreFromPiP() {
+    if (this.modal) {
+      this.modal.classList.remove('in-pip-mode');
+    }
+    if (this.isOpen) {
+      document.body.classList.add('theater-active');
+      document.body.style.overflow = 'hidden';
+    }
+    const pill = document.getElementById('theater-pip-restore-pill');
+    if (pill) {
+      pill.style.display = 'none';
+    }
+    if (window.showToast) {
+      window.showToast('Player window restored', 'info');
+    }
+  }
+
+  updatePiPButtonState(isActive) {
+    const directBtn = document.getElementById('theater-direct-pip-btn');
+    if (directBtn) directBtn.classList.toggle('active', isActive);
+
+    const headerBtn = document.getElementById('theater-header-pip-btn');
+    if (headerBtn) headerBtn.classList.toggle('active', isActive);
+
+    const popmenuPipBtn = document.getElementById('theater-pip-btn');
+    if (popmenuPipBtn) popmenuPipBtn.classList.toggle('active', isActive);
   }
 
   renderInPlayerSurfList(currentCategory, currentChannelId) {

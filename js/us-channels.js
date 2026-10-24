@@ -93,3 +93,46 @@ window.IVTV_US_TV_LOGO_FALLBACK_DOMAINS = {
   "we-tv-usa": "wetv.com",
   "entrepreneurtv": "stirr.com"
 };
+
+// Automatically integrate US TV channels into window.IVTV_DATA.channels
+// Enables Cinema Theater Player, Watch Live, Favorites, HUD, and Surf Drawer
+(function registerUsChannelsToData() {
+  if (!window.IVTV_DATA) {
+    window.IVTV_DATA = { channels: [] };
+  }
+  if (!Array.isArray(window.IVTV_DATA.channels)) {
+    window.IVTV_DATA.channels = [];
+  }
+
+  const channels = window.IVTV_US_TV_CHANNELS || [];
+  channels.forEach((ch, idx) => {
+    ch.id = ch.slug;
+    const localLogo = `assets/logos/${ch.slug}.png`;
+    ch.logo = localLogo;
+    const exists = window.IVTV_DATA.channels.find(c => c.id === ch.slug);
+    if (!exists) {
+      window.IVTV_DATA.channels.push({
+        id: ch.slug,
+        name: ch.name,
+        chNumber: 501 + idx,
+        category: "US TV",
+        subCategory: ch.category,
+        views: `${320 + (idx * 19) % 650}K`,
+        viewsNum: (320 + (idx * 19) % 650) * 1000,
+        rating: 4.8,
+        genre: ch.category,
+        synopsis: `Live high-definition television broadcast from ${ch.name} (United States).`,
+        badge: "LIVE HD",
+        tags: ["USA", "US TV", "Live", ...ch.category.split(/[\/\s]+/).filter(Boolean)],
+        gradient: "linear-gradient(135deg, #1e293b, #0f172a)",
+        logo: localLogo,
+        logoUrl: localLogo
+      });
+    } else {
+      exists.logo = localLogo;
+      exists.logoUrl = localLogo;
+    }
+  });
+})();
+
+

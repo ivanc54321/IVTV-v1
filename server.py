@@ -9,6 +9,7 @@ import sys
 import time
 import datetime
 import threading
+import hashlib
 
 # Handle headless/pythonw execution on Windows where sys.stdout and sys.stderr are None
 if sys.stdout is None or sys.stderr is None:
@@ -76,6 +77,7 @@ CHANNEL_SLUGS = {
     "sky-cinema-premiere-uk": "SkyCinemaPremiereUK",
     "sky-cinema-comedy-uk": "SkyCinemaComedyUK",
     "film4-uk": "Film4",
+    "film4": "Film4",
     "sky-news": "SkyNews",
     "bbc-news-uk": "BBCNewsUK",
     "gb-news": "GBNEWS",
@@ -228,8 +230,235 @@ def get_skynews_youtube_live_url():
     
     return SKY_NEWS_YT_CACHE["url"] or "https://www.youtube-nocookie.com/embed/live_stream?channel=UCoMdktPbSTixAyNGwb-5k9Q&autoplay=1"
 
-def get_clean_stream(channel_id, force_refresh=False):
+US_CHANNEL_STREAMS = {
+    "abc-usa": {
+        "url": "https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg00327-coxmediagroup-wsocbreaking-ono/playlist.m3u8",
+        "backupUrl": "https://amg01942-amg01942c2-stirr-us-10173.playouts.now.amagi.tv/playlist.m3u8",
+        "fallback": "https://abcnews.go.com/Live"
+    },
+    "ahc-usa": {
+        "url": "https://lds-timeline-rakuten.amagi.tv/playlist.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_AMERICAN_HEROES/index.m3u8",
+        "fallback": "https://www.ahctv.com/"
+    },
+    "antenna-tv-usa": {
+        "url": "http://23.237.104.106:8080/USA_BUZZR/index.m3u8",
+        "backupUrl": "https://amogonetworx-artflix-1-nl.samsung.wurl.tv/playlist.m3u8",
+        "fallback": "https://antennatv.tv/"
+    },
+    "ae-usa": {
+        "url": "https://a-cdn.klowdtv.com/live3/law_720p/playlist.m3u8",
+        "backupUrl": "https://cdn-uw2-prod.tsv2.amagi.tv/linear/amg01438-ewscrippscompan-courttv-tablo/playlist.m3u8",
+        "fallback": "https://www.aetv.com/"
+    },
+    "amc-usa": {
+        "url": "https://amc-amcpresents-1-us.xumo.wurl.tv/playlist.m3u8",
+        "backupUrl": "https://amg00353-lionsgatestudio-moviesphere-xumo-zh5u0.amagi.tv/playlist.m3u8",
+        "fallback": "https://www.amc.com/"
+    },
+    "animal-planet-usa": {
+        "url": "https://amg00861-terninternation-inwild-samsunguk-w5wic.amagi.tv/playlist/amg00861-terninternation-inwild-samsunguk/playlist.m3u8",
+        "backupUrl": "https://amg00793-amg00793c6-xumo-us-2669.playouts.now.amagi.tv/BBCStudios-BBCEarthA-hls/playlist.m3u8",
+        "fallback": "https://tgn.bozztv.com/betterlife/betternature/betternature/index.m3u8"
+    },
+    "adult-swim-usa": {
+        "url": "https://xumo-xumoent-vc-105-z0vpm.fast.nbcuni.com/live/master.m3u8",
+        "backupUrl": "https://drybar-drybarcomedy-1-au.samsung.wurl.tv/playlist.m3u8",
+        "fallback": "https://www.adultswim.com/streams"
+    },
+    "axs-tv-usa": {
+        "url": "https://cmc-cmctv-cineverse.amagi.tv/playlist.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_CMT/index.m3u8",
+        "fallback": "https://www.axs.tv/"
+    },
+    "abc-ny-usa": {
+        "url": "https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg00327-coxmediagroup-wsocbreaking-ono/playlist.m3u8",
+        "backupUrl": "https://amg01942-amg01942c2-stirr-us-10173.playouts.now.amagi.tv/playlist.m3u8",
+        "fallback": "https://abc7ny.com/live/"
+    },
+    "cnn-usa": {
+        "url": "https://d3bp6dwmpbdajl.cloudfront.net/v1/master/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-ury0meh5m4nzm/index.m3u8",
+        "backupUrl": "https://tvsen6.aynaott.com/cnn/index.m3u8",
+        "fallback": "https://www.cnn.com/"
+    },
+    "bbc-america-usa": {
+        "url": "https://amg00793-amg00793c6-xumo-us-2669.playouts.now.amagi.tv/BBCStudios-BBCEarthA-hls/playlist.m3u8",
+        "backupUrl": "https://amg00861-terninternation-inwild-samsunguk-w5wic.amagi.tv/playlist/amg00861-terninternation-inwild-samsunguk/playlist.m3u8",
+        "fallback": "https://www.bbcamerica.com/"
+    },
+    "comedy-central-usa": {
+        "url": "https://xumo-xumoent-vc-105-z0vpm.fast.nbcuni.com/live/master.m3u8",
+        "backupUrl": "https://drybar-drybarcomedy-1-au.samsung.wurl.tv/playlist.m3u8",
+        "fallback": "https://www.cc.com/"
+    },
+    "discovery-channel-usa": {
+        "url": "https://amg00793-amg00793c6-xumo-us-2669.playouts.now.amagi.tv/BBCStudios-BBCEarthA-hls/playlist.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_DESTINATION_AMERICA/index.m3u8",
+        "fallback": "https://www.discovery.com/"
+    },
+    "e-entertainment-usa": {
+        "url": "https://rpn.bozztv.com/gusa/gusa-celebrityscene/index.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_E/index.m3u8",
+        "fallback": "https://www.eonline.com/"
+    },
+    "food-network-usa": {
+        "url": "http://23.237.104.106:8080/USA_FOOD_NETWORK/index.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_COOKING/index.m3u8",
+        "fallback": "https://www.foodnetwork.com/"
+    },
+    "fox-news-usa": {
+        "url": "https://fox-foxnewsnow-vizio.amagi.tv/playlist.m3u8",
+        "backupUrl": "https://tvsen6.aynaott.com/foxnews/index.m3u8",
+        "fallback": "https://www.foxnews.com/video"
+    },
+    "freeform-usa": {
+        "url": "https://58cc65c534c67.streamlock.net/alkarmatv.com/alkarmaNA2.smil/playlist.m3u8",
+        "backupUrl": "https://dbrb49pjoymg4.cloudfront.net/v1/master/3fec3e5cac39a52b2132f9c66c83dae043dc17d4/prod_default_xumo-ams-aws/master.m3u8?ads.xumo_channelId=99991709",
+        "fallback": "https://www.freeform.com/"
+    },
+    "fx-usa": {
+        "url": "https://amg00353-lionsgatestudio-moviesphere-xumo-zh5u0.amagi.tv/playlist.m3u8",
+        "backupUrl": "https://d6dg3ebeih71x.cloudfront.net/Gravitas_Movies.m3u8",
+        "fallback": "https://www.fxnetworks.com/"
+    },
+    "hallmark-channel-usa": {
+        "url": "https://dbrb49pjoymg4.cloudfront.net/v1/master/3fec3e5cac39a52b2132f9c66c83dae043dc17d4/prod_default_xumo-ams-aws/master.m3u8?ads.xumo_channelId=99991709",
+        "backupUrl": "https://appletree-mytimeau-samsung.amagi.tv/playlist.m3u8",
+        "fallback": "https://www.hallmarkchannel.com/"
+    },
+    "hgtv-usa": {
+        "url": "https://thisoldhouse-2-us.roku.wurl.tv/playlist.m3u8",
+        "backupUrl": "https://amg00090-blueantcanada-amg00090c4-samsung-au-819.playouts.now.amagi.tv/playlist/amg00090-blueantfast-homefulworldwide-samsungau/playlist.m3u8",
+        "fallback": "https://www.hgtv.com/"
+    },
+    "history-channel-usa": {
+        "url": "https://lds-timeline-rakuten.amagi.tv/playlist.m3u8",
+        "backupUrl": "https://rpn.bozztv.com/gusa/gusa-tvshollywoohistory/index.m3u8",
+        "fallback": "https://www.history.com/"
+    },
+    "ifc-usa": {
+        "url": "https://d1j2u714xk898n.cloudfront.net/scheduler/scheduleMaster/145.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_IFC/index.m3u8",
+        "fallback": "https://www.ifc.com/"
+    },
+    "investigation-discovery-usa": {
+        "url": "https://a-cdn.klowdtv.com/live3/law_720p/playlist.m3u8",
+        "backupUrl": "https://cdn-uw2-prod.tsv2.amagi.tv/linear/amg01438-ewscrippscompan-courttv-tablo/playlist.m3u8",
+        "fallback": "https://www.investigationdiscovery.com/"
+    },
+    "lifetime-usa": {
+        "url": "https://appletree-mytimeau-samsung.amagi.tv/playlist.m3u8",
+        "backupUrl": "https://dbrb49pjoymg4.cloudfront.net/v1/master/3fec3e5cac39a52b2132f9c66c83dae043dc17d4/prod_default_xumo-ams-aws/master.m3u8?ads.xumo_channelId=99991709",
+        "fallback": "https://www.mylifetime.com/"
+    },
+    "msnbc-usa": {
+        "url": "https://nmxlive.akamaized.net/hls/live/529965/Live_1/index.m3u8",
+        "backupUrl": "https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg00327-coxmediagroup-wsocbreaking-ono/playlist.m3u8",
+        "fallback": "https://www.msnbc.com/"
+    },
+    "mtv-usa": {
+        "url": "https://cmc-cmctv-cineverse.amagi.tv/playlist.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_MTV/index.m3u8",
+        "fallback": "https://www.mtv.com/"
+    },
+    "national-geographic-usa": {
+        "url": "https://amg00861-terninternation-inwild-samsunguk-w5wic.amagi.tv/playlist/amg00861-terninternation-inwild-samsunguk/playlist.m3u8",
+        "backupUrl": "https://amg00793-amg00793c6-xumo-us-2669.playouts.now.amagi.tv/BBCStudios-BBCEarthA-hls/playlist.m3u8",
+        "fallback": "https://www.nationalgeographic.com/"
+    },
+    "paramount-network-usa": {
+        "url": "https://amc-amcpresents-1-us.xumo.wurl.tv/playlist.m3u8",
+        "backupUrl": "https://amogonetworx-grjngo-3-dk.samsung.wurl.tv/playlist.m3u8",
+        "fallback": "https://www.paramountnetwork.com/"
+    },
+    "pbs-usa": {
+        "url": "https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg00327-coxmediagroup-wsocbreaking-ono/playlist.m3u8",
+        "backupUrl": "https://aegis-cloudfront-1.tubi.video/7e1c26b7-7975-4240-9a4f-480eaa8f3ea4/playlist.m3u8",
+        "fallback": "https://www.pbs.org/"
+    },
+    "science-channel-usa": {
+        "url": "https://lds-timeline-rakuten.amagi.tv/playlist.m3u8",
+        "backupUrl": "https://bbc-classicdrwho-1-us.roku.wurl.tv/playlist.m3u8",
+        "fallback": "https://www.sciencechannel.com/"
+    },
+    "syfy-usa": {
+        "url": "http://23.237.104.106:8080/USA_SYFY/index.m3u8",
+        "backupUrl": "https://bbc-classicdrwho-1-us.roku.wurl.tv/playlist.m3u8",
+        "fallback": "https://www.syfy.com/"
+    },
+    "tbs-usa": {
+        "url": "https://xumo-xumoent-vc-105-z0vpm.fast.nbcuni.com/live/master.m3u8",
+        "backupUrl": "https://drybar-drybarcomedy-1-au.samsung.wurl.tv/playlist.m3u8",
+        "fallback": "https://www.tbs.com/"
+    },
+    "tlc-usa": {
+        "url": "https://brightstar-sls-pull-secure.akamaized.net/brightstarsls/stream.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_E/index.m3u8",
+        "fallback": "https://www.tlc.com/"
+    },
+    "tnt-usa": {
+        "url": "https://d6dg3ebeih71x.cloudfront.net/Gravitas_Movies.m3u8",
+        "backupUrl": "https://amogonetworx-artflix-1-nl.samsung.wurl.tv/playlist.m3u8",
+        "fallback": "https://www.tntdrama.com/"
+    },
+    "travel-channel-usa": {
+        "url": "http://23.237.104.106:8080/USA_DESTINATION_AMERICA/index.m3u8",
+        "backupUrl": "https://amg00861-terninternation-inwild-samsunguk-w5wic.amagi.tv/playlist/amg00861-terninternation-inwild-samsunguk/playlist.m3u8",
+        "fallback": "https://www.travelchannel.com/"
+    },
+    "trutv-usa": {
+        "url": "https://cdn-uw2-prod.tsv2.amagi.tv/linear/amg01438-ewscrippscompan-courttv-tablo/playlist.m3u8",
+        "backupUrl": "http://23.237.104.106:8080/USA_TRUTV/index.m3u8",
+        "fallback": "https://www.trutv.com/"
+    },
+    "usa-network-usa": {
+        "url": "https://cdn-uw2-prod.tsv2.amagi.tv/linear/amg01438-ewscrippscompan-ionmystery-tablo/playlist.m3u8",
+        "backupUrl": "https://amg00353-lionsgatestudio-moviesphere-xumo-zh5u0.amagi.tv/playlist.m3u8",
+        "fallback": "https://www.usanetwork.com/"
+    },
+    "vh1-usa": {
+        "url": "https://d198ro05q94rc4.cloudfront.net/XITE_Rock_On.m3u8",
+        "backupUrl": "https://d284aawtm5vi48.cloudfront.net/v1/master/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-fjdfi2br1jtq7/XITE_90s_Throwback.m3u8",
+        "fallback": "https://www.vh1.com/"
+    },
+    "we-tv-usa": {
+        "url": "http://23.237.104.106:8080/USA_WE_TV/index.m3u8",
+        "backupUrl": "https://amc-absolutereality-1-us.plex.wurl.tv/playlist.m3u8",
+        "fallback": "https://www.wetv.com/"
+    },
+    "entrepreneurtv": {
+        "url": "http://23.237.104.106:8080/USA_BLOOMBERG/index.m3u8",
+        "backupUrl": "https://aegis-cloudfront-1.tubi.video/7e1c26b7-7975-4240-9a4f-480eaa8f3ea4/playlist.m3u8",
+        "fallback": "https://www.entrepreneur.com/tv"
+    }
+}
+
+def get_clean_stream(channel_id, force_refresh=False, use_backup=False):
     fallback_url = CHANNEL_EMBEDS.get(channel_id, f"https://freeshot.live/embed/{CHANNEL_SLUGS.get(channel_id, 'SkySportsPremierLeague')}.php")
+    
+    # Check US Channels first (Multi-tier server pool with backup & auto-failover)
+    if channel_id in US_CHANNEL_STREAMS:
+        info = US_CHANNEL_STREAMS[channel_id]
+        primary_url = info.get('url', '')
+        backup_url = info.get('backupUrl', '')
+        fallback_embed = info.get('fallback', '')
+
+        chosen_url = backup_url if (use_backup and backup_url) else primary_url
+        proxied_primary = f"/api/proxy/hls?url={urllib.parse.quote(primary_url, safe='')}" if primary_url else ""
+        proxied_backup = f"/api/proxy/hls?url={urllib.parse.quote(backup_url, safe='')}" if backup_url else ""
+        chosen_proxied = proxied_backup if (use_backup and backup_url) else proxied_primary
+
+        return {
+            "success": True,
+            "type": "hls",
+            "streamUrl": chosen_proxied,
+            "backupStreamUrl": proxied_backup,
+            "directStreamUrl": chosen_url,
+            "fallbackEmbedUrl": fallback_embed,
+            "channelSlug": channel_id,
+            "currentToken": "",
+            "channelId": channel_id
+        }
     
     if channel_id in ["sky-news", "skynews"]:
         yt_live = get_skynews_youtube_live_url()
@@ -370,9 +599,47 @@ def get_clean_stream(channel_id, force_refresh=False):
     if channel_id in ["channel4", "channel4-uk"]:
         return {
             "success": True,
-            "type": "hls",
-            "streamUrl": "/api/proxy/hls?url=" + urllib.parse.quote("https://488f4ce4.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctZ2JfVGFsa19ITFM/playlist.m3u8", safe=""),
-            "fallbackEmbedUrl": "https://www.channel4.com/live",
+            "type": "iframe",
+            "streamUrl": "/api/proxy/embed?url=https%3A%2F%2Fwww.channel4.com%2Fnow%2FC4",
+            "fallbackEmbedUrl": "https://www.channel4.com/now/C4",
+            "channelId": channel_id
+        }
+
+    # Film4 uses high-performance direct HLS tokenized streaming via CHANNEL_SLUGS
+
+    if channel_id in ["e4", "e4-uk"]:
+        return {
+            "success": True,
+            "type": "iframe",
+            "streamUrl": "/api/proxy/embed?url=https%3A%2F%2Fwww.channel4.com%2Fnow%2FE4",
+            "fallbackEmbedUrl": "https://www.channel4.com/now/E4",
+            "channelId": channel_id
+        }
+
+    if channel_id in ["more4", "more4-uk"]:
+        return {
+            "success": True,
+            "type": "iframe",
+            "streamUrl": "/api/proxy/embed?url=https%3A%2F%2Fwww.channel4.com%2Fnow%2FM4",
+            "fallbackEmbedUrl": "https://www.channel4.com/now/M4",
+            "channelId": channel_id
+        }
+
+    if channel_id in ["4seven", "4seven-uk"]:
+        return {
+            "success": True,
+            "type": "iframe",
+            "streamUrl": "/api/proxy/embed?url=https%3A%2F%2Fwww.channel4.com%2Fnow%2F4S",
+            "fallbackEmbedUrl": "https://www.channel4.com/now/4S",
+            "channelId": channel_id
+        }
+
+    if channel_id in ["e4-extra", "e4-extra-uk", "e4extra"]:
+        return {
+            "success": True,
+            "type": "iframe",
+            "streamUrl": "/api/proxy/embed?url=https%3A%2F%2Fwww.channel4.com%2Fnow%2FE4",
+            "fallbackEmbedUrl": "https://www.channel4.com/now/E4",
             "channelId": channel_id
         }
 
@@ -391,6 +658,15 @@ def get_clean_stream(channel_id, force_refresh=False):
             "type": "youtube",
             "streamUrl": "https://www.youtube-nocookie.com/embed/live_stream?channel=UChqUTb7kYRX8-EiaN3XFrSQ&autoplay=1&modestbranding=1&rel=0",
             "fallbackEmbedUrl": "https://www.youtube-nocookie.com/embed/live_stream?channel=UChqUTb7kYRX8-EiaN3XFrSQ&autoplay=1&modestbranding=1&rel=0",
+            "channelId": channel_id
+        }
+
+    if channel_id in ["talktv", "talktv-uk"]:
+        return {
+            "success": True,
+            "type": "youtube",
+            "streamUrl": "https://www.youtube-nocookie.com/embed/DFYaNjzI1aI?autoplay=1&modestbranding=1&rel=0",
+            "fallbackEmbedUrl": "https://www.youtube.com/watch?v=DFYaNjzI1aI",
             "channelId": channel_id
         }
 
@@ -618,11 +894,22 @@ EPG_MAPPINGS = {
     "itv4-uk": {"source": "freeview", "id": "8330", "name": "ITV4", "ch": 120, "genre": "Action & Sport"},
     "itv4": {"source": "freeview", "id": "8330", "name": "ITV4", "ch": 120, "genre": "Action & Sport"},
     "channel4": {"source": "freeview", "id": "8384", "name": "Channel 4", "ch": 104, "genre": "Entertainment"},
+    "channel4-uk": {"source": "freeview", "id": "8384", "name": "Channel 4", "ch": 104, "genre": "Entertainment"},
+    "e4-uk": {"source": "freeview", "id": "8386", "name": "E4", "ch": 135, "genre": "Comedy"},
+    "e4": {"source": "freeview", "id": "8386", "name": "E4", "ch": 135, "genre": "Comedy"},
+    "more4-uk": {"source": "freeview", "id": "8387", "name": "More4", "ch": 136, "genre": "Lifestyle"},
+    "more4": {"source": "freeview", "id": "8387", "name": "More4", "ch": 136, "genre": "Lifestyle"},
+    "4seven-uk": {"source": "freeview", "id": "8388", "name": "4seven", "ch": 137, "genre": "Trending"},
+    "4seven": {"source": "freeview", "id": "8388", "name": "4seven", "ch": 137, "genre": "Trending"},
+    "e4-extra-uk": {"source": "freeview", "id": "8389", "name": "E4 Extra", "ch": 138, "genre": "Comedy"},
     "channel5": {"source": "freeview", "id": "8500", "name": "Channel 5", "ch": 105, "genre": "Documentaries & Drama"},
     "film4-uk": {"source": "freeview", "id": "8385", "name": "Film4", "ch": 313, "genre": "Cinema"},
+    "film4": {"source": "freeview", "id": "8385", "name": "Film4", "ch": 313, "genre": "Cinema"},
     "bbc-news-uk": {"source": "freeview", "id": "4352", "name": "BBC News", "ch": 503, "genre": "News"},
     "sky-news": {"source": "freeview", "id": "22080", "name": "Sky News", "ch": 501, "genre": "Live Breaking News"},
     "gb-news": {"source": "freeview", "id": "27360", "name": "GB News", "ch": 512, "genre": "News & Debate"},
+    "talktv-uk": {"source": "freeview", "id": "28800", "name": "TalkTV", "ch": 237, "genre": "News & Debate"},
+    "talktv": {"source": "freeview", "id": "28800", "name": "TalkTV", "ch": 237, "genre": "News & Debate"},
     "al-jazeera": {"source": "freeview", "id": "16278", "name": "Al Jazeera English", "ch": 511, "genre": "International News"},
     
     # Sky Sports Channels (Sky Hawk Linear API)
@@ -955,6 +1242,24 @@ def get_epg_data(channel_id=None, force_refresh=False):
 
     return {"status": "error", "message": "EPG data unavailable"}
 
+_URL_SHORTENER_MAP = {}
+_URL_LOCK = threading.Lock()
+
+def _make_proxy_link(full_u, ref=None):
+    if len(full_u) > 180:
+        h = 'u_' + hashlib.md5(full_u.encode('utf-8')).hexdigest()[:16]
+        with _URL_LOCK:
+            _URL_SHORTENER_MAP[h] = full_u
+            if len(_URL_SHORTENER_MAP) > 10000:
+                for k in list(_URL_SHORTENER_MAP.keys())[:5000]:
+                    del _URL_SHORTENER_MAP[k]
+        link = f"/api/proxy/hls?url={h}"
+    else:
+        link = f"/api/proxy/hls?url={urllib.parse.quote(full_u, safe='')}"
+    if ref:
+        link += f"&ref={urllib.parse.quote(ref, safe='')}"
+    return link
+
 def proxy_hls_stream(handler, target_url, referer_override=None):
     if not target_url:
         handler.send_response(400)
@@ -962,6 +1267,10 @@ def proxy_hls_stream(handler, target_url, referer_override=None):
         handler.end_headers()
         handler.wfile.write(b"Missing target url")
         return
+
+    if target_url.startswith('u_'):
+        with _URL_LOCK:
+            target_url = _URL_SHORTENER_MAP.get(target_url, target_url)
 
     # Auto-detect necessary upstream headers based on target domain
     if not referer_override:
@@ -1066,9 +1375,7 @@ def proxy_hls_stream(handler, target_url, referer_override=None):
                                 else:
                                     sep = '&' if '?' in full_uri else '?'
                                     full_uri += f"{sep}token={active_slug_token}"
-                            proxy_uri = f"/api/proxy/hls?url={urllib.parse.quote(full_uri, safe='')}"
-                            if referer_override:
-                                proxy_uri += f"&ref={urllib.parse.quote(referer_override, safe='')}"
+                            proxy_uri = _make_proxy_link(full_uri, referer_override)
                             return f'URI="{proxy_uri}"'
                         line = re.sub(r'URI="([^"]+)"', replace_uri, line)
                     rewritten.append(line)
@@ -1080,9 +1387,7 @@ def proxy_hls_stream(handler, target_url, referer_override=None):
                         else:
                             sep = '&' if '?' in full_line_url else '?'
                             full_line_url += f"{sep}token={active_slug_token}"
-                    proxy_line = f"/api/proxy/hls?url={urllib.parse.quote(full_line_url, safe='')}"
-                    if referer_override:
-                        proxy_line += f"&ref={urllib.parse.quote(referer_override, safe='')}"
+                    proxy_line = _make_proxy_link(full_line_url, referer_override)
                     rewritten.append(proxy_line)
             
             body = ('\n'.join(rewritten)).encode('utf-8')
@@ -1099,7 +1404,11 @@ def proxy_hls_stream(handler, target_url, referer_override=None):
             handler.send_response(upstream.getcode())
             handler.send_header('Content-Type', content_type)
             handler.send_header('Access-Control-Allow-Origin', '*')
-            handler.send_header('Cache-Control', 'no-store')
+            # Cache media segments (.ts, .m4s, fmp4) to enable smooth playback and prevent re-fetching stalls
+            if any(ext in target_url.lower() for ext in ['.ts', '.m4s', '.mp4', '.aac', 'segment', 'chunk', 'fragment']):
+                handler.send_header('Cache-Control', 'public, max-age=120')
+            else:
+                handler.send_header('Cache-Control', 'no-store')
             for header in ('Content-Length', 'Content-Range', 'Accept-Ranges'):
                 value = upstream.headers.get(header)
                 if value:
@@ -1143,6 +1452,42 @@ def proxy_embed(handler, target_url):
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
     }
     try:
+        # Dedicated Channel 4 official live feed proxy (strips X-Frame-Options and cookie popups)
+        if 'channel4.com' in target_url:
+            req_c4 = urllib.request.Request(target_url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Referer': 'https://www.channel4.com/'
+            })
+            with urllib.request.urlopen(req_c4, timeout=10) as resp_c4:
+                c4_html = resp_c4.read().decode('utf-8', errors='ignore')
+
+            c4_injected = """
+            <base href="https://www.channel4.com/">
+            <style>
+              body, html {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background: #000 !important;
+                overflow-x: hidden !important;
+              }
+              #onetrust-consent-sdk, .onetrust-pc-dark, #onetrust-banner-sdk {
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+              }
+            </style>
+            """
+            c4_mod = c4_html.replace('<head>', f'<head>{c4_injected}', 1) if '<head>' in c4_html else (c4_injected + c4_html)
+            handler.send_response(200)
+            handler.send_header('Content-Type', 'text/html; charset=utf-8')
+            handler.send_header('Access-Control-Allow-Origin', '*')
+            handler.end_headers()
+            handler.wfile.write(c4_mod.encode('utf-8'))
+            return
+
         # Check if target is a FreeInterTV channel page
         if 'freeintertv.com/view/id-' in target_url:
             cookie_jar = urllib.request.HTTPCookieProcessor()
@@ -1211,10 +1556,26 @@ def proxy_embed(handler, target_url):
             except Exception as e:
                 print(f"[Embed Proxy] Inner player resolve fallback: {e}")
 
+        if 'freeintertv.com/view/id-' in target_url:
+            try:
+                req_fitv = urllib.request.Request(target_url, headers=headers)
+                with urllib.request.urlopen(req_fitv, timeout=6) as resp_fitv:
+                    fitv_html = resp_fitv.read().decode('utf-8', errors='ignore')
+                    m_screen = re.search(r'iframe[^>]+src=["\']([^"\']*screen\.php[^"\']*)["\']', fitv_html)
+                    if m_screen:
+                        scr_url = m_screen.group(1)
+                        if scr_url.startswith('/'):
+                            scr_url = 'http://www.freeintertv.com' + scr_url
+                        actual_url = scr_url
+            except Exception as e:
+                print(f"[Embed Proxy] Freeintertv screen resolve fallback: {e}")
+
         # Generic embed proxy with full ad sanitization
         req_headers = dict(headers)
         if 'wideiptv.top' in actual_url:
             req_headers['Referer'] = 'https://freeshot.live/'
+        if 'freeintertv.com' in actual_url:
+            req_headers['Referer'] = target_url
 
         req = urllib.request.Request(actual_url, headers=req_headers)
         with urllib.request.urlopen(req, timeout=8) as upstream:
@@ -1296,13 +1657,23 @@ def proxy_embed(handler, target_url):
 
 class IVTVRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-        self.send_header('Pragma', 'no-cache')
-        self.send_header('Expires', '0')
+        buf = getattr(self, '_headers_buffer', [])
+        has_cors = any(h.lower().startswith(b'access-control-allow-origin:') for h in buf)
+        if not has_cors:
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        has_cache = any(h.lower().startswith(b'cache-control:') for h in buf)
+        if not has_cache:
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
         super().end_headers()
+
+    def do_HEAD(self):
+        if self.path.startswith('/api/'):
+            return self.do_GET()
+        return super().do_HEAD()
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -1331,8 +1702,9 @@ class IVTVRequestHandler(http.server.SimpleHTTPRequestHandler):
             params = urllib.parse.parse_qs(parsed.query)
             channel_id = params.get('channel', [''])[0]
             force = params.get('refresh', ['0'])[0] in ['1', 'true', 'yes'] or params.get('force', ['0'])[0] in ['1', 'true', 'yes']
+            use_backup = params.get('backup', ['0'])[0] in ['1', 'true', 'yes'] or params.get('source', [''])[0] in ['backup', 'secondary']
             
-            result = get_clean_stream(channel_id, force_refresh=force)
+            result = get_clean_stream(channel_id, force_refresh=force, use_backup=use_backup)
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')

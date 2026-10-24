@@ -951,12 +951,56 @@ body.theater-active .toast-container,
   background: var(--bg-glass-card);
   transition: all var(--transition-normal);
   scroll-snap-align: start;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
 }
 
-.us-tv-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(0, 255, 136, 0.45);
-  box-shadow: var(--glow-card-hover);
+.us-tv-card:hover,
+.us-tv-card:focus-visible {
+  transform: translateY(-6px);
+  border-color: rgba(0, 255, 136, 0.55);
+  box-shadow: 0 10px 30px rgba(0, 255, 136, 0.22), var(--glow-card-hover);
+}
+
+.us-tv-play-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 9, 8, 0.5);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.us-tv-card:hover .us-tv-play-overlay,
+.us-tv-card:focus-visible .us-tv-play-overlay {
+  opacity: 1;
+}
+
+.us-tv-play-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.85rem;
+  background: linear-gradient(135deg, #00ff88, #00cc66);
+  color: #060908;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 4px 16px rgba(0, 255, 136, 0.45);
+  transform: scale(0.85);
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.us-tv-card:hover .us-tv-play-badge,
+.us-tv-card:focus-visible .us-tv-play-badge {
+  transform: scale(1);
 }
 
 .us-tv-card-media {
@@ -984,6 +1028,36 @@ body.theater-active .toast-container,
   font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.06em;
+}
+
+.us-tv-fav-btn {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.65rem;
+  z-index: 4;
+}
+
+.us-tv-card .us-tv-fav-btn {
+  background: rgba(10, 15, 13, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.75);
+  transition: all var(--transition-fast);
+}
+
+.us-tv-card .us-tv-fav-btn:hover {
+  color: var(--accent-gold);
+  border-color: rgba(251, 191, 36, 0.6);
+  background: rgba(20, 25, 22, 0.95);
+  transform: scale(1.15);
+}
+
+.us-tv-card .us-tv-fav-btn.active {
+  color: var(--accent-gold);
+  background: rgba(251, 191, 36, 0.28);
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.45);
 }
 
 .us-tv-logo-plate {

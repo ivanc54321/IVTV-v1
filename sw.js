@@ -3,7 +3,7 @@
    Enables 100% Offline Capability, Local Shell Caching & Instant Standalone Launch
    ========================================================================== */
 
-const CACHE_NAME = 'ivtv-cache-v39';
+const CACHE_NAME = 'ivtv-cache-v41';
 const PRECACHE_ASSETS = [
   "./",
   "./index.html",
@@ -62,13 +62,19 @@ const PRECACHE_ASSETS = [
   "./assets/logos/big-bang-theory.JPG",
   "./assets/logos/bloomberg-us.png",
   "./assets/logos/cbn-news.svg",
-  "./assets/logos/channel4.jpg",
+  "./assets/logos/channel4.png",
+  "./assets/logos/channel4.svg",
+  "./assets/logos/e4-uk.png",
+  "./assets/logos/more4-uk.png",
+  "./assets/logos/4seven-uk.png",
+  "./assets/logos/e4-extra.png",
   "./assets/logos/channel5.svg",
   "./assets/logos/chc.jpg",
   "./assets/logos/cnn-international.png",
   "./assets/logos/cnn-live-news.jpg",
   "./assets/logos/emusic.gif",
   "./assets/logos/film4-uk.png",
+  "./assets/logos/film4.svg",
   "./assets/logos/fox-news-live.svg",
   "./assets/logos/fox-sport.gif",
   "./assets/logos/game-time.jpg",
@@ -122,6 +128,8 @@ const PRECACHE_ASSETS = [
   "./assets/logos/sky-sports-tennis-uk.png",
   "./assets/logos/the-vault.svg",
   "./assets/logos/the-vintage-movie-channel.svg",
+  "./assets/logos/talktv-uk.png",
+  "./assets/logos/talktv-uk.svg",
   "./assets/logos/trace-sports.png"
 ];
 

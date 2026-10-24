@@ -216,6 +216,27 @@
   text-transform: uppercase;
 }
 
+.theater-us-pill {
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.45), rgba(37, 99, 235, 0.25));
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.55);
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+}
+
+.theater-us-pill .us-flag-icon {
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
 .theater-close-btn {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -292,6 +313,23 @@
     margin-top: -90px !important;
     height: calc(100% + 90px) !important;
     max-height: calc(100% + 90px) !important;
+    aspect-ratio: auto !important;
+  }
+}
+
+/* Dedicated Channel 4 Header Crop (cleanly frames official player) */
+.theater-iframe.crop-channel4-nav {
+  margin-top: -65px !important;
+  height: calc(100% + 65px) !important;
+  max-height: calc(100% + 65px) !important;
+  aspect-ratio: auto !important;
+}
+
+@media (max-width: 768px) {
+  .theater-iframe.crop-channel4-nav {
+    margin-top: -55px !important;
+    height: calc(100% + 55px) !important;
+    max-height: calc(100% + 55px) !important;
     aspect-ratio: auto !important;
   }
 }
@@ -467,6 +505,7 @@
 }
 
 .theater-action-btn.popout-tooltip-action,
+.theater-action-btn.pip-tooltip-action,
 .theater-action-btn.fullscreen-tooltip-action {
   position: relative;
   width: 36px;
@@ -499,6 +538,8 @@
 
 .theater-action-btn.popout-tooltip-action:hover .theater-control-tooltip,
 .theater-action-btn.popout-tooltip-action:focus-visible .theater-control-tooltip,
+.theater-action-btn.pip-tooltip-action:hover .theater-control-tooltip,
+.theater-action-btn.pip-tooltip-action:focus-visible .theater-control-tooltip,
 .theater-action-btn.fullscreen-tooltip-action:hover .theater-control-tooltip,
 .theater-action-btn.fullscreen-tooltip-action:focus-visible .theater-control-tooltip {
   opacity: 1;
@@ -2194,4 +2235,74 @@
     width: 85vw;
     max-width: 350px;
   }
+}
+
+/* ==========================================================================
+   PICTURE-IN-PICTURE (PIP) FLOATING MINI PLAYER STYLES
+   ========================================================================== */
+
+.header-pip-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  transition: all var(--transition-fast);
+}
+
+.header-pip-btn:hover {
+  color: #ffffff;
+  background: rgba(0, 240, 118, 0.15);
+  border-color: rgba(0, 240, 118, 0.4);
+  transform: scale(1.05);
+}
+
+.header-pip-btn.active,
+.theater-action-btn.pip-tooltip-action.active {
+  color: var(--accent-emerald, #00f076) !important;
+  border-color: rgba(0, 240, 118, 0.6) !important;
+  background: rgba(0, 240, 118, 0.2) !important;
+  box-shadow: 0 0 10px rgba(0, 240, 118, 0.35);
+}
+
+.theater-modal-overlay.in-pip-mode {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.pip-restore-pill {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 1.15rem;
+  background: rgba(14, 21, 17, 0.94);
+  border: 1px solid rgba(0, 240, 118, 0.4);
+  border-radius: var(--radius-full, 9999px);
+  color: #ffffff;
+  font-family: var(--font-display, inherit);
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 240, 118, 0.25);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: fadeInModal 0.25s ease;
+}
+
+.pip-restore-pill:hover {
+  transform: translateY(-2px) scale(1.03);
+  border-color: var(--accent-emerald, #00f076);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 240, 118, 0.4);
 }

@@ -19,10 +19,10 @@ An ultra-modern, dark-glass live streaming web application inspired by the **Cin
    - Flexible sorting: **Channel Number (LCN)**, **Most Viewed 🔥**, **Name (A–Z)**, and **Top Rated ★**.
    - Instant in-section quick filter search for rapid channel discovery.
 
-3. **US TV Channel Directory**:
-   - Browse 40 US channels in seven homepage-style category carousels, with logos and genre labels.
-   - Search the directory by channel name or genre; matching rows update as you type.
-   - Directory-only listing; playback is not configured.
+3. **US TV Channels (Watch Live & Directory)**:
+   - Browse and stream 40 US channels in seven homepage-style category carousels, with official logos, genre labels, and live status badges.
+   - 1-click Watch Live playback via the Cinema Theater Player with native direct HLS and auto-recovering mirror streams.
+   - Search across US channels or surf them via the in-player Quick Channel Surf drawer.
 
 4. **Top 10 Channels with Giant Outlined Numerals**:
    - Signature hollow stroke numbers (`1`, `2`, `3`...) sitting beside top-ranked channels sorted dynamically by viewership.

@@ -327,7 +327,7 @@ class UIController {
   }
 
   getHomeChannels() {
-    return (window.IVTV_DATA?.channels || []).filter(c => !this.isSportsChannel(c));
+    return (window.IVTV_DATA?.channels || []).filter(c => !this.isSportsChannel(c) && c.category !== 'US TV');
   }
 
   // ==========================================================================
@@ -1047,13 +1047,29 @@ class UIController {
         const fallbackUrl = fallbackDomain
           ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(fallbackDomain)}&sz=128`
           : '';
+        const isFav = window.ivtvStorage && window.ivtvStorage.isFavorite(channel.slug);
         return `
-          <article class="us-tv-card" role="listitem">
+          <article class="us-tv-card playable" role="button" tabindex="0" data-channel-id="${channel.slug}" onclick="window.ivtvPlayer?.openPlayer('${channel.slug}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.ivtvPlayer?.openPlayer('${channel.slug}')}" title="Watch ${escapeHtml(channel.name)} Live">
             <div class="us-tv-card-media">
-              <span class="us-tv-card-tag">US CHANNEL</span>
+              <span class="us-tv-card-tag"><span class="live-pulse-dot" style="width:5px;height:5px;display:inline-block;margin-right:4px;"></span>LIVE HD</span>
+              <button class="card-fav-btn us-tv-fav-btn ${isFav ? 'active' : ''}" 
+                      data-fav-id="${channel.slug}" 
+                      title="${isFav ? 'Remove from Favorites' : 'Add to Favorites'}" 
+                      aria-label="${isFav ? 'Remove from Favorites' : 'Add to Favorites'}"
+                      onclick="event.stopPropagation(); window.UIControllerInstance.handleFavClick('${channel.slug}', this)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </button>
               <div class="us-tv-logo-plate" aria-hidden="true">
                 <span class="us-tv-logo-fallback">${escapeHtml(channel.name.slice(0, 2).toUpperCase())}</span>
                 <img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" decoding="async" data-fallback-src="${escapeHtml(fallbackUrl)}" onerror="if(this.dataset.fallbackSrc &amp;&amp; !this.dataset.fallback){this.dataset.fallback='1';this.src=this.dataset.fallbackSrc}else{this.remove()}">
+              </div>
+              <div class="us-tv-play-overlay">
+                <div class="us-tv-play-badge">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>WATCH LIVE</span>
+                </div>
               </div>
               <div class="us-tv-media-shade"></div>
             </div>
@@ -1111,13 +1127,18 @@ class UIController {
       'itv1-uk',
       'channel4',
       'channel5',
+      'e4-uk',
+      'more4-uk',
+      'film4-uk',
+      '4seven-uk',
+      'e4-extra-uk',
+      'talktv-uk',
       'bbc-two-uk',
       'bbc-three-uk',
       'bbc-news-uk',
       'itv2-uk',
       'itv3-uk',
       'itv4-uk',
-      'film4-uk',
       'sky-news',
       'gb-news'
     ];
@@ -1453,7 +1474,8 @@ class UIController {
     if (!container || !track) return;
 
     const favIds = window.ivtvStorage ? window.ivtvStorage.getFavorites() : [];
-    const favChannels = this.getHomeChannels().filter(c => favIds.includes(c.id));
+    const allChannels = window.IVTV_DATA?.channels || [];
+    const favChannels = allChannels.filter(c => favIds.includes(c.id));
 
     container.style.display = 'block';
 
@@ -1570,9 +1592,19 @@ class UIController {
 
   handleFavClick(channelId, btn) {
     const added = window.ivtvStorage.toggleFavorite(channelId);
-    btn.classList.toggle('active', added);
+    this.syncFavButtonsForChannel(channelId, added);
     this.renderFavoritesRow();
     window.showToast(added ? 'Added to Favorites' : 'Removed from Favorites', added ? 'success' : 'info');
+  }
+
+  syncFavButtonsForChannel(channelId, isFav) {
+    document.querySelectorAll(`.card-fav-btn[data-fav-id="${channelId}"], .us-tv-card[data-channel-id="${channelId}"] .card-fav-btn, .channel-card[data-channel-id="${channelId}"] .card-fav-btn`).forEach(b => {
+      b.classList.toggle('active', isFav);
+      b.title = isFav ? 'Remove from Favorites' : 'Add to Favorites';
+      b.setAttribute('aria-label', isFav ? 'Remove from Favorites' : 'Add to Favorites');
+      const svg = b.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isFav ? 'currentColor' : 'none');
+    });
   }
 
   // ==========================================================================
@@ -1878,6 +1910,10 @@ class UIController {
           e.preventDefault();
           e.stopPropagation();
           expandNavbar();
+          if (burgerWrapper) {
+            burgerWrapper.classList.add('open');
+            if (burgerBtn) burgerBtn.setAttribute('aria-expanded', 'true');
+          }
         });
       }
 
@@ -1924,7 +1960,7 @@ class UIController {
 
       // Close burger dropdown when clicking outside
       document.addEventListener('click', (e) => {
-        if (!burgerWrapper.contains(e.target)) {
+        if (!burgerWrapper.contains(e.target) && (!navExpandBtn || !navExpandBtn.contains(e.target))) {
           burgerWrapper.classList.remove('open');
           burgerBtn.setAttribute('aria-expanded', 'false');
         }
@@ -2186,6 +2222,19 @@ class UIController {
     window.addEventListener('ivtv:favorites-changed', () => {
       this.renderFavoritesRow();
       this.renderTopRanked();
+      const favIds = window.ivtvStorage ? window.ivtvStorage.getFavorites() : [];
+      document.querySelectorAll('.us-tv-card').forEach(card => {
+        const id = card.getAttribute('data-channel-id');
+        const b = card.querySelector('.us-tv-fav-btn');
+        if (b && id) {
+          const isFav = favIds.includes(id);
+          b.classList.toggle('active', isFav);
+          b.title = isFav ? 'Remove from Favorites' : 'Add to Favorites';
+          b.setAttribute('aria-label', isFav ? 'Remove from Favorites' : 'Add to Favorites');
+          const svg = b.querySelector('svg');
+          if (svg) svg.setAttribute('fill', isFav ? 'currentColor' : 'none');
+        }
+      });
     });
 
     // Initialize Mouse Wheel & Drag-to-Scroll on all carousels
