@@ -113,12 +113,22 @@ ElseIf fso.FileExists("C:\Program Files\Microsoft\Edge\Application\msedge.exe") 
     edgePath = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
 End If
 
+' Determine target URL
+Dim targetUrl
+targetUrl = "http://127.0.0.1:5173/"
+
 ' By default, launch as standalone desktop app window unless /browser is specified
 Dim useBrowserOnly
 useBrowserOnly = False
 If WScript.Arguments.Count > 0 Then
-    If LCase(WScript.Arguments(0)) = "/browser" Or LCase(WScript.Arguments(0)) = "--browser" Then
+    Dim arg0
+    arg0 = WScript.Arguments(0)
+    If LCase(arg0) = "/browser" Or LCase(arg0) = "--browser" Then
         useBrowserOnly = True
+    ElseIf Left(arg0, 4) = "http" Then
+        targetUrl = arg0
+    ElseIf Trim(arg0) <> "" Then
+        targetUrl = "http://127.0.0.1:5173/?play=" & arg0
     End If
 End If
 
@@ -130,12 +140,12 @@ If Not useBrowserOnly Then
     End If
 
     If browserExe <> "" Then
-        browserArgs = "--app=http://127.0.0.1:5173/?standalone=1 --start-maximized --autoplay-policy=no-user-gesture-required --disable-features=Translate"
+        browserArgs = "--app=" & targetUrl & " --start-maximized --autoplay-policy=no-user-gesture-required --disable-features=Translate,OptimizationHints --no-first-run"
         oShell.Run """" & browserExe & """ " & browserArgs, 1, False
         browserLaunched = True
     End If
 End If
 
 If Not browserLaunched Then
-    oShell.Run "http://127.0.0.1:5173/?standalone=1"
+    oShell.Run targetUrl
 End If

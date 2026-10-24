@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Handle URL Query Params for auto-play or standalone pop-out window: /?play=channelId&popout=1
   const urlParams = new URLSearchParams(window.location.search);
   const playTarget = urlParams.get('play') || urlParams.get('channel');
-  const isPopout = urlParams.get('popout') === '1' || urlParams.get('standalone') === '1';
+  // Popout mode is ONLY for single-channel floating player windows, never for the main standalone app
+  const isPopout = urlParams.get('popout') === '1' && Boolean(playTarget);
 
   if (isPopout) {
     document.body.classList.add('popout-mode');
@@ -192,7 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
       window.location.reload(true);
     });
   }
