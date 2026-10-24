@@ -26,6 +26,7 @@ class UIController {
     this.setupHeroActions();
     this.renderHero();
     this.renderTopRanked();
+    this.renderUsTvDirectory();
     this.renderFreeviewSection();
     this.renderProvidersBar();
     this.renderCategorySections();
@@ -1004,6 +1005,87 @@ class UIController {
   }
 
   // ==========================================================================
+  // US TV DIRECTORY
+  // ==========================================================================
+
+  renderUsTvDirectory(query = '') {
+    const railsContainer = document.getElementById('us-tv-rails');
+    const count = document.getElementById('us-tv-channel-count');
+    const empty = document.getElementById('us-tv-empty');
+    if (!railsContainer) return;
+
+    const channels = window.IVTV_US_TV_CHANNELS || [];
+    const groups = window.IVTV_US_TV_GROUPS || [];
+    const normalizedQuery = query.trim().toLowerCase();
+    const filteredChannels = channels.filter(channel =>
+      `${channel.name} ${channel.category}`.toLowerCase().includes(normalizedQuery)
+    );
+    const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[char]);
+
+    if (count) {
+      count.textContent = normalizedQuery
+        ? `${filteredChannels.length} of ${channels.length} Channels`
+        : `${channels.length} Channels`;
+    }
+    if (empty) empty.hidden = filteredChannels.length > 0;
+
+    railsContainer.innerHTML = groups.map(group => {
+      const groupChannels = filteredChannels.filter(channel => group.slugs.includes(channel.slug));
+      if (groupChannels.length === 0) return '';
+
+      const trackId = `us-tv-track-${group.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      const headingId = `${trackId}-heading`;
+      const cards = groupChannels.map(channel => {
+        const logoUrl = channel.logoUrl.replace('/512px-', '/500px-');
+        const fallbackDomain = window.IVTV_US_TV_LOGO_FALLBACK_DOMAINS?.[channel.slug];
+        const fallbackUrl = fallbackDomain
+          ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(fallbackDomain)}&sz=128`
+          : '';
+        return `
+          <article class="us-tv-card" role="listitem">
+            <div class="us-tv-card-media">
+              <span class="us-tv-card-tag">US CHANNEL</span>
+              <div class="us-tv-logo-plate" aria-hidden="true">
+                <span class="us-tv-logo-fallback">${escapeHtml(channel.name.slice(0, 2).toUpperCase())}</span>
+                <img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" decoding="async" data-fallback-src="${escapeHtml(fallbackUrl)}" onerror="if(this.dataset.fallbackSrc &amp;&amp; !this.dataset.fallback){this.dataset.fallback='1';this.src=this.dataset.fallbackSrc}else{this.remove()}">
+              </div>
+              <div class="us-tv-media-shade"></div>
+            </div>
+            <div class="us-tv-card-copy">
+              <h4>${escapeHtml(channel.name)}</h4>
+              <p>${escapeHtml(channel.category)}</p>
+            </div>
+          </article>
+        `;
+      }).join('');
+
+      return `
+        <section class="us-tv-category-row" aria-labelledby="${headingId}">
+          <div class="us-tv-category-heading">
+            <h3 id="${headingId}">${escapeHtml(group.name)}</h3>
+            <span class="us-tv-category-count">${groupChannels.length}</span>
+          </div>
+          <div class="carousel-track-wrapper">
+            <button class="carousel-nav-btn prev" data-target="${trackId}" title="Previous ${escapeHtml(group.name)} channels" aria-label="Scroll ${escapeHtml(group.name)} channels left">‹</button>
+            <div class="carousel-track us-tv-rail-track" id="${trackId}" role="list" aria-labelledby="${headingId}" tabindex="0">
+              ${cards}
+            </div>
+            <button class="carousel-nav-btn next" data-target="${trackId}" title="Next ${escapeHtml(group.name)} channels" aria-label="Scroll ${escapeHtml(group.name)} channels right">›</button>
+          </div>
+        </section>
+      `;
+    }).join('');
+
+    this.initCarouselMouseNavigation();
+  }
+
+  // ==========================================================================
   // CATEGORY CAROUSEL ROWS
   // ==========================================================================
 
@@ -1724,6 +1806,12 @@ class UIController {
   // ==========================================================================
 
   setupEventListeners() {
+    const usTvSearchInput = document.getElementById('us-tv-search-input');
+    if (usTvSearchInput) {
+      usTvSearchInput.addEventListener('input', () => {
+        this.renderUsTvDirectory(usTvSearchInput.value);
+      });
+    }
     // Remote Live EPG Sync Listener
     window.addEventListener('ivtv:epg-updated', () => {
       this.renderTopRanked();
@@ -1903,6 +1991,12 @@ class UIController {
           return;
         }
 
+        if (filter === 'us-tv') {
+          const usTvSection = document.getElementById('us-tv-section');
+          if (usTvSection) usTvSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+
         if (filter === 'sky') {
           const skySec = document.getElementById('sky-channels-section');
           if (skySec) skySec.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1955,6 +2049,7 @@ class UIController {
           { id: 'news-section', nav: 'News' },
           { id: 'entertainment-section', nav: 'Entertainment' },
           { id: 'sky-channels-section', nav: 'sky' },
+          { id: 'us-tv-section', nav: 'us-tv' },
           { id: 'freeview-section', nav: 'freeview' },
           { id: 'top-ranked-section', nav: 'most-viewed' },
           { id: 'favorites-section', nav: 'favorites' }

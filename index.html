@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="css/variables.css?v=40">
   <link rel="stylesheet" href="css/fonts.css?v=40">
   <link rel="stylesheet" href="css/main.css?v=64">
-  <link rel="stylesheet" href="css/components.css?v=43">
+  <link rel="stylesheet" href="css/components.css?v=47">
   <link rel="stylesheet" href="css/player.css?v=56">
   <link rel="stylesheet" href="css/epg.css?v=43">
 
@@ -135,6 +135,7 @@
           <ul class="nav-pills" id="header-nav-pills">
             <li><button class="nav-pill-btn" data-nav="most-viewed">Most Viewed</button></li>
             <li><button class="nav-pill-btn" data-nav="freeview">Freeview</button></li>
+            <li><button class="nav-pill-btn" data-nav="us-tv">US TV</button></li>
             <li><button class="nav-pill-btn" data-nav="sky">Sky Channels</button></li>
             <li><button class="nav-pill-btn" data-nav="Entertainment">Entertainment</button></li>
             <li><button class="nav-pill-btn" data-nav="News">News</button></li>
@@ -365,6 +366,25 @@
           </div>
           <button class="carousel-nav-btn next" data-target="freeview-track" title="Next">›</button>
         </div>
+      </div>
+    </section>
+
+    <!-- US TV CHANNEL DIRECTORY -->
+    <section class="content-section" id="us-tv-section">
+      <div class="container">
+        <div class="section-header">
+          <div class="title-with-badge">
+            <h2 class="section-title">US TV</h2>
+            <span class="section-counter-badge" id="us-tv-channel-count" aria-live="polite" aria-atomic="true">40 Channels</span>
+          </div>
+          <label class="us-tv-search">
+            <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="us-tv-search-input" type="search" aria-label="Search US TV channels" placeholder="Search US channels..." autocomplete="off">
+          </label>
+        </div>
+        <p class="us-tv-note">Channel directory only. Playback is not configured for these channels.</p>
+        <div class="us-tv-rails" id="us-tv-rails"></div>
+        <p class="us-tv-empty" id="us-tv-empty" hidden>No US channels match your search.</p>
       </div>
     </section>
 
@@ -965,7 +985,8 @@
   <script src="js/favorites.js?v=41"></script>
   <script src="js/epg.js?v=40"></script>
   <script src="js/player.js?v=50"></script>
-  <script src="js/ui.js?v=62"></script>
-  <script src="js/app.js?v=70"></script>
+  <script src="js/us-channels.js?v=4"></script>
+  <script src="js/ui.js?v=66"></script>
+  <script src="js/app.js?v=76"></script>
 </body>
 </html>

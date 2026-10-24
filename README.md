@@ -19,29 +19,34 @@ An ultra-modern, dark-glass live streaming web application inspired by the **Cin
    - Flexible sorting: **Channel Number (LCN)**, **Most Viewed 🔥**, **Name (A–Z)**, and **Top Rated ★**.
    - Instant in-section quick filter search for rapid channel discovery.
 
-3. **Top 10 Channels with Giant Outlined Numerals**:
+3. **US TV Channel Directory**:
+   - Browse 40 US channels in seven homepage-style category carousels, with logos and genre labels.
+   - Search the directory by channel name or genre; matching rows update as you type.
+   - Directory-only listing; playback is not configured.
+
+4. **Top 10 Channels with Giant Outlined Numerals**:
    - Signature hollow stroke numbers (`1`, `2`, `3`...) sitting beside top-ranked channels sorted dynamically by viewership.
    - Interactive hover cards with glowing neon borders, live pulse dots, view counts, and 1-click play triggers.
 
-4. **Cinema Theater Stream Player**:
+5. **Cinema Theater Stream Player**:
    - 16:9 responsive theater modal with smooth zoom transitions and loading spinners.
    - Displays active channel logo, channel number (LCN), and real-time broadcast ticker.
    - Fullscreen mode, pop-out external player, stream reload button, and favorite toggle.
    - **In-Player Quick Channel Surf Drawer**: Switch between live channels without closing playback mode!
    - Built-in VPN / ISP streaming advisory helper.
 
-5. **49 Verified UK & Sky Channels**:
+6. **49 Verified UK & Sky Channels**:
    - **Live Sports Arena (14 Channels)**: Sky Sports F1, Premier League, Main Event, Tennis, Football, Cricket, Golf, Action, Racing, News, Mix, Plus, LaLiga, Rally TV, Trace Sports.
    - **Sky Cinema & Movies (11 Channels)**: Premiere, Select, Hits, Greats, Family, Action, Comedy, Thriller, Drama, Sci-Fi Horror, Film4.
    - **UK Entertainment & Series (15 Channels)**: BBC One, BBC Two, BBC Three, ITV1, ITV2, ITV3, ITV4, Sky Atlantic, Sky Showcase, Sky Comedy, Sky Crime, Sky Arts, Sky History, Gold, S4C.
    - **News & Current Affairs (9 Channels)**: Sky News, BBC News UK, Bloomberg Television, CNN International, Russia Today (RT), GB News, Al Jazeera English, Reuters Live.
 
-5. **Live TV Guide (EPG)**:
+7. **Live TV Guide (EPG)**:
    - Full schedule timeline grid with red vertical real-time "NOW" marker.
    - Sticky channel column featuring official logos and channel numbers.
    - Detailed program modals with synopses, remaining runtime, and direct tune-in buttons.
 
-6. **Real-Time Search & Watchlist**:
+8. **Real-Time Search & Watchlist**:
    - Instant search across channel names, LCN numbers (e.g. `101`, `402`), genres, and categories (press `/` to focus).
    - Persistent LocalStorage favorites and recently watched history.
 
@@ -88,4 +93,3 @@ IVTV is fully engineered for zero-latency offline use with zero external CDN dep
    - Real-time connectivity monitor in navbar: displays **ONLINE** (green pulse) when connected and **OFFLINE** (amber) when disconnected.
    - When offline, the complete **24-hour EPG TV Guide**, **Watchlist & Favorites**, **All UK Channels Directory**, and instant search remain 100% operational.
    - The theater player provides intelligent offline notifications with direct 1-click access to the TV Guide.
-
